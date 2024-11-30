@@ -17,7 +17,52 @@ define( 'ODOO_BASE', 'https://almokhlif-oud-live-staging-15355104.dev.odoo.com/'
 
 // Include REST API integration for Odoo.
 require_once plugin_dir_path( __FILE__ ) . 'includes/rest-api.php';
+/**
+ * Generate Odoo authentication token.
+ *
+ * @return string|false The token if successful, or false if there is an error.
+ */
+function get_odoo_auth_token() {
+	// Odoo API authentication endpoint.
+	$auth_url = ODOO_BASE . 'web/session/erp_authenticate';
 
+	// Authentication request body.
+	$auth_body = wp_json_encode(
+		array(
+			'params' => array(
+				'db'       => 'almokhlif-oud-live-staging-15355104',
+				'login'    => 'hussam.elsayed@almokhlifoud.com',
+				'password' => '123',
+			),
+		)
+	);
+
+	// Send the authentication request.
+	$auth_response = wp_remote_post(
+		$auth_url,
+		array(
+			'headers' => array( 'Content-Type' => 'application/json' ),
+			'body'    => $auth_body,
+		)
+	);
+
+	// Check for errors in the response.
+	if ( is_wp_error( $auth_response ) ) {
+		error_log( 'Odoo authentication failed: ' . $auth_response->get_error_message() ); // Log the error for debugging.
+		return false;
+	}
+
+	$auth_body_response = wp_remote_retrieve_body( $auth_response );
+	$auth_data          = json_decode( $auth_body_response );
+
+	// Check if the token exists in the response.
+	if ( isset( $auth_data->result->token ) ) {
+		return $auth_data->result->token;
+	}
+
+	error_log( 'Odoo authentication failed: Token not found in response.' ); // Log the error for debugging.
+	return false;
+}
 /**
  * Check stock from Odoo before allowing a product to be added to the WooCommerce cart.
  *
@@ -30,9 +75,6 @@ require_once plugin_dir_path( __FILE__ ) . 'includes/rest-api.php';
  * @return bool Whether the add-to-cart action should proceed.
  */
 function odoo_check_stock_before_add_to_cart( $passed, $product_id, $quantity ) {
-
-	$quantity = $quantity;
-
 	// Check if WooCommerce is active.
 	if ( ! class_exists( 'WooCommerce' ) ) {
 		return $passed;
@@ -42,46 +84,21 @@ function odoo_check_stock_before_add_to_cart( $passed, $product_id, $quantity ) 
 	$product = wc_get_product( $product_id );
 	$sku     = $product->get_sku();
 
-	// Odoo API endpoints.
-	$auth_url  = ODOO_BASE . 'web/session/erp_authenticate';
-	$stock_url = ODOO_BASE . 'api/stock.quant/get_available_qty_data';
+	// Fetch the authentication token.
+	$token = get_odoo_auth_token();
 
-	// Step 1: Authenticate to get the token.
-	$auth_body = json_encode(
-		array(
-			'params' => array(
-				'db'       => 'almokhlif-oud-live-staging-15355104',
-				'login'    => 'hussam.elsayed@almokhlifoud.com',
-				'password' => '123',
-			),
-		)
-	);
-
-	$auth_response = wp_remote_post(
-		$auth_url,
-		array(
-			'headers' => array( 'Content-Type' => 'application/json' ),
-			'body'    => $auth_body,
-		)
-	);
-	if ( is_wp_error( $auth_response ) ) {
-		wc_add_notice( 'لا يمكن الاتصال بالخادم للتحقق من المخزون. يرجى المحاولة لاحقًا.', 'error' );
-		return false;
-	}
-
-	$auth_body_response = wp_remote_retrieve_body( $auth_response );
-	$auth_data          = json_decode( $auth_body_response );
-	if ( ! isset( $auth_data->result->token ) ) {
+	if ( ! $token ) {
 		wc_add_notice( 'فشل التحقق من المخزون. يرجى المحاولة لاحقًا.', 'error' );
 		return false;
 	}
 
-	// Retrieve the token from the response.
-	$token = $auth_data->result->token;
+	// Odoo API stock endpoint.
+	$stock_url = ODOO_BASE . 'api/stock.quant/get_available_qty_data';
 
-	// Step 2: Fetch stock data.
+	// Prepare the request body for stock data.
 	$stock_body = json_encode( array( 'default_code' => $sku ) );
 
+	// Send the stock request.
 	$stock_response = wp_remote_post(
 		$stock_url,
 		array(
@@ -124,6 +141,7 @@ function odoo_check_stock_before_add_to_cart( $passed, $product_id, $quantity ) 
 	return $passed; // Allow adding to cart if all checks pass.
 }
 
+
 add_filter( 'woocommerce_add_to_cart_validation', 'odoo_check_stock_before_add_to_cart', 10, 3 );
 
 /**
@@ -146,15 +164,29 @@ add_filter( 'woocommerce_add_to_cart_validation', 'odoo_check_stock_before_add_t
 function send_order_details_to_odoo( $order_id, $old_status, $new_status ) {
 	// Check if the new status is `odoo_transfered`.
 	if ( 'completed' === $new_status ) {
+		$token = get_odoo_auth_token();
+
+		if ( ! $token ) {
+			error_log( "Order {$order_id} faild to be sont to Odoo" );
+			return false;
+		}
+		$odoo_order = get_post_meta( $order_id, 'odoo_order', true );
+		if ( ! empty( $odoo_order ) && is_numeric( $odoo_order ) ) {
+			return;
+		}
 		// Get the order object.
 		$order = wc_get_order( $order_id );
 
 		// Prepare the order data.
 		$order_data = array(
-			'order_id' => $order->get_id(),
-			'total'    => $order->get_total(),
-			'currency' => $order->get_currency(),
-			'billing'  => array(
+			'phone'          => '0594001088', // $order->get_billing_phone()
+			'manual_confirm' => true,
+			'state'          => 'draft',
+			'order_line'     => array(),
+			'order_id'       => $order->get_id(),
+			'total'          => $order->get_total(),
+			'currency'       => $order->get_currency(),
+			'billing'        => array(
 				'first_name' => $order->get_billing_first_name(),
 				'last_name'  => $order->get_billing_last_name(),
 				'address_1'  => $order->get_billing_address_1(),
@@ -166,10 +198,14 @@ function send_order_details_to_odoo( $order_id, $old_status, $new_status ) {
 				'email'      => $order->get_billing_email(),
 				'phone'      => $order->get_billing_phone(),
 			),
-			'items'    => array(),
-			'fees'     => array(),
-			'tax'      => $order->get_total_tax(),
-			'discount' => $order->get_discount_total(),
+			'fees'           => array(),
+			'tax'            => $order->get_total_tax(),
+			'discount'       => $order->get_discount_total(),
+			'shipping'       => array(
+				'total'  => $order->get_shipping_total(),
+				'tax'    => $order->get_shipping_tax(),
+				'method' => $order->get_shipping_method(),
+			),
 		);
 
 		// Get line items.
@@ -179,13 +215,13 @@ function send_order_details_to_odoo( $order_id, $old_status, $new_status ) {
 		 * @var WC_Order_Item $item
 		 */
 		foreach ( $order->get_items( 'line_item' ) as $item_id => $item ) {
-			$product                  = $item->get_product();
-			$order_data['products'][] = array(
-				'product_id' => $product ? $product->get_id() : 0,
-				'name'       => $item->get_name(),
-				'quantity'   => $item->get_quantity(),
-				'subtotal'   => $item->get_subtotal(),      // Subtotal for the line item.
-				'total'      => $item->get_total(),         // Total including discounts.
+			$product                    = $item->get_product();
+			$order_data['order_line'][] = array(
+				'default_code'    => $product->get_sku(),
+				'name'            => $item->get_name(),
+				'product_uom_qty' => $item->get_quantity(),
+				'price_subtotal'  => $item->get_subtotal(),      // Subtotal for the line item.
+				'price_total'     => $item->get_total(),         // Total including discounts.
 			);
 		}
 
@@ -196,8 +232,9 @@ function send_order_details_to_odoo( $order_id, $old_status, $new_status ) {
 				'total' => $fee->get_amount(), // Correct method for fee total.
 			);
 		}
+
 		// Set the external API URL.
-		$odoo_api_url = 'https://your-odoo-instance.com/api/order';
+		$odoo_api_url = ODOO_BASE . 'api/sale.order/add_update_order';
 
 		// Send the data to the external API.
 		$response = wp_remote_post(
@@ -207,16 +244,40 @@ function send_order_details_to_odoo( $order_id, $old_status, $new_status ) {
 				'body'    => wp_json_encode( $order_data ),
 				'headers' => array(
 					'Content-Type' => 'application/json',
+					'token'        => $token,
 				),
 			)
 		);
 
+		$order_body_response = wp_remote_retrieve_body( $response );
+		$order_body          = json_decode( $order_body_response );
+
 		// Check for errors.
 		if ( is_wp_error( $response ) ) {
-			error_log( 'Order transfer to Odoo failed: ' . $response->get_error_message() ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
-		} else {
-			error_log( 'Order transfer to Odoo succeeded for order ID: ' . $order_id ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+			error_log( 'Order ' . $order_id . ' transfer to Odoo failed: ' . $response->get_error_message() ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+		}
+
+		// Check if the response is successful.
+		if ( isset( $order_body->result->Code ) && 200 === $order_body->result->Code ) {
+			// Extract the ID from the response and save it as order meta.
+			$odoo_order_id = $order_body->result->Data->ID;
+			update_post_meta( $order_id, 'odoo_order', $odoo_order_id );
 		}
 	}
 }
 add_action( 'woocommerce_order_status_changed', 'send_order_details_to_odoo', 10, 3 );
+
+
+/**
+ * Display Odoo Order ID under the billing details in the admin order page.
+ *
+ * @param WC_Order $order The order object.
+ */
+function display_odoo_order_id_in_admin( $order ) {
+	$odoo_order_id = get_post_meta( $order->get_id(), 'odoo_order', true );
+
+	if ( $odoo_order_id ) {
+		echo '<p><strong>' . __( 'Odoo Order ID:', 'text-domain' ) . '</strong> ' . esc_html( $odoo_order_id ) . '</p>';
+	}
+}
+add_action( 'woocommerce_admin_order_data_after_billing_address', 'display_odoo_order_id_in_admin', 10, 1 );
