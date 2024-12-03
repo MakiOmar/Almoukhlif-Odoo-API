@@ -43,24 +43,20 @@ function get_odoo_auth_token() {
 		array(
 			'headers' => array( 'Content-Type' => 'application/json' ),
 			'body'    => $auth_body,
+			'timeout' => 20,
 		)
 	);
 
 	// Check for errors in the response.
-	if ( is_wp_error( $auth_response ) ) {
-		error_log( 'Odoo authentication failed: ' . $auth_response->get_error_message() ); // Log the error for debugging.
-		return false;
+	if ( ! is_wp_error( $auth_response ) ) {
+		$auth_body_response = wp_remote_retrieve_body( $auth_response );
+		$auth_data          = json_decode( $auth_body_response );
+
+		// Check if the token exists in the response.
+		if ( isset( $auth_data->result->token ) ) {
+			return $auth_data->result->token;
+		}
 	}
-
-	$auth_body_response = wp_remote_retrieve_body( $auth_response );
-	$auth_data          = json_decode( $auth_body_response );
-
-	// Check if the token exists in the response.
-	if ( isset( $auth_data->result->token ) ) {
-		return $auth_data->result->token;
-	}
-
-	error_log( 'Odoo authentication failed: Token not found in response.' ); // Log the error for debugging.
 	return false;
 }
 /**
@@ -69,26 +65,40 @@ function get_odoo_auth_token() {
  * This function fetches the product SKU and calls an Odoo API endpoint to verify stock levels.
  * If the Odoo stock is less than the WooCommerce stock, the product is prevented from being added to the cart.
  *
- * @param bool $passed     Whether the add-to-cart action should proceed.
- * @param int  $product_id The ID of the product being added to the cart.
- * @param int  $quantity   The quantity of the product.
+ * @param bool    $passed     Whether the add-to-cart action should proceed.
+ * @param int     $product_id The ID of the product being added to the cart.
+ * @param int     $quantity   The quantity of the product.
+ * @param integer $variation_id      Variation ID being added to the cart.
+ * @param array   $variation         Variation data.
  * @return bool Whether the add-to-cart action should proceed.
  */
-function odoo_check_stock_before_add_to_cart( $passed, $product_id, $quantity ) {
+function odoo_check_stock_before_add_to_cart( $passed, $product_id, $quantity, $variation_id, $variation ) {
 	// Check if WooCommerce is active.
 	if ( ! class_exists( 'WooCommerce' ) ) {
 		return $passed;
 	}
-
 	// Get the product SKU.
 	$product = wc_get_product( $product_id );
 	$sku     = $product->get_sku();
-
+	// Check if the product is a variation.
+	if ( $variation_id ) {
+		// Get the parent (main) product object.
+		$variation  = wc_get_product( $variation_id );
+		$multiplier = $variation->get_meta( '_stock_multiplier' );
+	} else {
+		// Use the simple product's SKU.
+		$multiplier = 1;
+	}
+	$quantity = $quantity * $multiplier;
+	$message  = 'لا يمكن استرجاع معلومات المخزون. يرجى المحاولة لاحقًا.';
 	// Fetch the authentication token.
 	$token = get_odoo_auth_token();
 
 	if ( ! $token ) {
-		wc_add_notice( 'فشل التحقق من المخزون. يرجى المحاولة لاحقًا.', 'error' );
+		if ( function_exists( 'teamlog' ) ) {
+			teamlog( $message );
+		}
+		wc_add_notice( $message, 'error' );
 		return false;
 	}
 
@@ -107,11 +117,12 @@ function odoo_check_stock_before_add_to_cart( $passed, $product_id, $quantity ) 
 				'token'        => $token,
 			),
 			'body'    => $stock_body,
+			'timeout' => 20,
 		)
 	);
 
 	if ( is_wp_error( $stock_response ) ) {
-		wc_add_notice( 'لا يمكن التحقق من المخزون في هذا الوقت. يرجى المحاولة لاحقًا.', 'error' );
+		wc_add_notice( $message, 'error' );
 		return false;
 	}
 
@@ -119,10 +130,9 @@ function odoo_check_stock_before_add_to_cart( $passed, $product_id, $quantity ) 
 	$stock_data          = json_decode( $stock_body_response );
 
 	if ( ! isset( $stock_data->result->Data ) || ! is_array( $stock_data->result->Data ) ) {
-		wc_add_notice( 'لا يمكن استرجاع معلومات المخزون. يرجى المحاولة لاحقًا.', 'error' );
+		wc_add_notice( $message, 'error' );
 		return false;
 	}
-
 	// Calculate total positive stock quantity.
 	$total_stock = 0;
 	foreach ( $stock_data->result->Data as $stock_item ) {
@@ -131,10 +141,13 @@ function odoo_check_stock_before_add_to_cart( $passed, $product_id, $quantity ) 
 			$total_stock += $q;
 		}
 	}
-
+	if ( function_exists( 'teamlog' ) ) {
+		teamlog( $total_stock );
+	}
 	// Compare Odoo stock with WooCommerce stock.
 	if ( absint( $total_stock ) < absint( $quantity ) ) {
-		wc_add_notice( 'مخزون المنتج محدود. يرجى التواصل مع الدعم للحصول على مزيد من المعلومات.', 'error' );
+		$message = 'مخزون المنتج محدود. يرجى التواصل مع الدعم للحصول على مزيد من المعلومات.';
+		wc_add_notice( $message, 'error' );
 		return false; // Prevent adding to cart.
 	}
 
@@ -142,7 +155,7 @@ function odoo_check_stock_before_add_to_cart( $passed, $product_id, $quantity ) 
 }
 
 
-add_filter( 'woocommerce_add_to_cart_validation', 'odoo_check_stock_before_add_to_cart', 10, 3 );
+add_filter( 'woocommerce_add_to_cart_validation', 'odoo_check_stock_before_add_to_cart', 10, 5 );
 
 /**
  * Send order payment details to an external API when the order status changes to `odoo_transfered`.
@@ -162,24 +175,32 @@ add_filter( 'woocommerce_add_to_cart_validation', 'odoo_check_stock_before_add_t
  * @param string $new_status The new status of the order.
  */
 function send_order_details_to_odoo( $order_id, $old_status, $new_status ) {
-	// Check if the new status is `odoo_transfered`.
+	// Check if the new status is `completed`.
 	if ( 'completed' === $new_status ) {
 		$token = get_odoo_auth_token();
 
 		if ( ! $token ) {
-			error_log( "Order {$order_id} faild to be sont to Odoo" );
+			$message = "Order {$order_id} failed to be sent to Odoo.";
+			add_action(
+				'admin_notices',
+				function () use ( $message ) {
+					echo '<div class="notice notice-error"><p>' . esc_html( $message ) . '</p></div>';
+				}
+			);
 			return false;
 		}
+
 		$odoo_order = get_post_meta( $order_id, 'odoo_order', true );
 		if ( ! empty( $odoo_order ) && is_numeric( $odoo_order ) ) {
 			return;
 		}
+
 		// Get the order object.
 		$order = wc_get_order( $order_id );
 
 		// Prepare the order data.
 		$order_data = array(
-			'phone'          => '0594001088', // $order->get_billing_phone()
+			'phone'          => '0594001088', // Replace with $order->get_billing_phone() as needed.
 			'manual_confirm' => true,
 			'state'          => 'draft',
 			'order_line'     => array(),
@@ -209,19 +230,14 @@ function send_order_details_to_odoo( $order_id, $old_status, $new_status ) {
 		);
 
 		// Get line items.
-		/**
-		 * Order item.
-		 *
-		 * @var WC_Order_Item $item
-		 */
 		foreach ( $order->get_items( 'line_item' ) as $item_id => $item ) {
 			$product                    = $item->get_product();
 			$order_data['order_line'][] = array(
 				'default_code'    => $product->get_sku(),
 				'name'            => $item->get_name(),
 				'product_uom_qty' => $item->get_quantity(),
-				'price_subtotal'  => $item->get_subtotal(),      // Subtotal for the line item.
-				'price_total'     => $item->get_total(),         // Total including discounts.
+				'price_subtotal'  => $item->get_subtotal(),
+				'price_total'     => $item->get_total(),
 			);
 		}
 
@@ -229,7 +245,7 @@ function send_order_details_to_odoo( $order_id, $old_status, $new_status ) {
 		foreach ( $order->get_items( 'fee' ) as $fee_id => $fee ) {
 			$order_data['fees'][] = array(
 				'name'  => $fee->get_name(),
-				'total' => $fee->get_amount(), // Correct method for fee total.
+				'total' => $fee->get_amount(),
 			);
 		}
 
@@ -246,6 +262,7 @@ function send_order_details_to_odoo( $order_id, $old_status, $new_status ) {
 					'Content-Type' => 'application/json',
 					'token'        => $token,
 				),
+				'timeout' => 20,
 			)
 		);
 
@@ -254,7 +271,13 @@ function send_order_details_to_odoo( $order_id, $old_status, $new_status ) {
 
 		// Check for errors.
 		if ( is_wp_error( $response ) ) {
-			error_log( 'Order ' . $order_id . ' transfer to Odoo failed: ' . $response->get_error_message() ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+			$message = 'Order ' . $order_id . ' transfer to Odoo failed: ' . $response->get_error_message();
+			add_action(
+				'admin_notices',
+				function () use ( $message ) {
+					echo '<div class="notice notice-error"><p>' . esc_html( $message ) . '</p></div>';
+				}
+			);
 		}
 
 		// Check if the response is successful.
@@ -262,6 +285,14 @@ function send_order_details_to_odoo( $order_id, $old_status, $new_status ) {
 			// Extract the ID from the response and save it as order meta.
 			$odoo_order_id = $order_body->result->Data->ID;
 			update_post_meta( $order_id, 'odoo_order', $odoo_order_id );
+
+			$message = "Order {$order_id} successfully transferred to Odoo with Odoo ID {$odoo_order_id}.";
+			add_action(
+				'admin_notices',
+				function () use ( $message ) {
+					echo '<div class="notice notice-success"><p>' . esc_html( $message ) . '</p></div>';
+				}
+			);
 		}
 	}
 }
