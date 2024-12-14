@@ -106,7 +106,12 @@ function odoo_check_stock_before_add_to_cart( $passed, $product_id, $quantity, $
 	$stock_url = ODOO_BASE . 'api/stock.quant/get_available_qty_data';
 
 	// Prepare the request body for stock data.
-	$stock_body = json_encode( array( 'default_code' => $sku ) );
+	$stock_body = json_encode(
+		array(
+			'default_code' => $sku,
+			//'location_id'  => 70,
+		)
+	);
 
 	// Send the stock request.
 	$stock_response = wp_remote_post(
@@ -128,7 +133,6 @@ function odoo_check_stock_before_add_to_cart( $passed, $product_id, $quantity, $
 
 	$stock_body_response = wp_remote_retrieve_body( $stock_response );
 	$stock_data          = json_decode( $stock_body_response );
-
 	if ( ! isset( $stock_data->result->Data ) || ! is_array( $stock_data->result->Data ) ) {
 		wc_add_notice( $message, 'error' );
 		return false;
@@ -136,13 +140,10 @@ function odoo_check_stock_before_add_to_cart( $passed, $product_id, $quantity, $
 	// Calculate total positive stock quantity.
 	$total_stock = 0;
 	foreach ( $stock_data->result->Data as $stock_item ) {
-		$q = (int) $stock_item->quantity;
+		$q = (int) $stock_item->forecasted_quantity;
 		if ( $q > 0 ) {
 			$total_stock += $q;
 		}
-	}
-	if ( function_exists( 'teamlog' ) ) {
-		teamlog( $total_stock );
 	}
 	// Compare Odoo stock with WooCommerce stock.
 	if ( absint( $total_stock ) < absint( $quantity ) ) {
@@ -177,6 +178,11 @@ add_filter( 'woocommerce_add_to_cart_validation', 'odoo_check_stock_before_add_t
 function send_order_details_to_odoo( $order_id, $old_status, $new_status ) {
 	// Check if the new status is `completed`.
 	if ( 'completed' === $new_status ) {
+		$odoo_order = get_post_meta( $order_id, 'odoo_order', true );
+		if ( ! empty( $odoo_order ) && is_numeric( $odoo_order ) ) {
+			return;
+		}
+
 		$token = get_odoo_auth_token();
 
 		if ( ! $token ) {
@@ -190,17 +196,11 @@ function send_order_details_to_odoo( $order_id, $old_status, $new_status ) {
 			return false;
 		}
 
-		$odoo_order = get_post_meta( $order_id, 'odoo_order', true );
-		if ( ! empty( $odoo_order ) && is_numeric( $odoo_order ) ) {
-			return;
-		}
-
 		// Get the order object.
 		$order = wc_get_order( $order_id );
 
 		// Prepare the order data.
 		$order_data = array(
-			'phone'          => '0594001088', // Replace with $order->get_billing_phone() as needed.
 			'manual_confirm' => true,
 			'state'          => 'draft',
 			'order_line'     => array(),
@@ -229,18 +229,38 @@ function send_order_details_to_odoo( $order_id, $old_status, $new_status ) {
 			),
 		);
 
-		// Get line items.
 		foreach ( $order->get_items( 'line_item' ) as $item_id => $item ) {
-			$product                    = $item->get_product();
+			// Get the product associated with the line item.
+			$product = $item->get_product();
+
+			// Get the product ID.
+			$product_id = $product->get_id();
+
+			// Initialize the multiplier.
+			$multiplier = 1;
+
+			// Check if the product is a variation.
+			if ( $product->is_type( 'variation' ) ) {
+				// Get the `_stock_multiplier` meta value.
+				$multiplier = (float) get_post_meta( $product_id, '_stock_multiplier', true );
+
+				// Default multiplier to 1 if not set or invalid.
+				if ( empty( $multiplier ) || $multiplier <= 0 ) {
+					$multiplier = 1;
+				}
+			}
+
+			// Multiply the quantity by the multiplier.
+			$quantity = $item->get_quantity() * $multiplier;
+
+			// Add the line item to the order data.
 			$order_data['order_line'][] = array(
 				'default_code'    => $product->get_sku(),
 				'name'            => $item->get_name(),
-				'product_uom_qty' => $item->get_quantity(),
-				'price_subtotal'  => $item->get_subtotal(),
-				'price_total'     => $item->get_total(),
+				'product_uom_qty' => $quantity, // Adjusted quantity with multiplier.
+				'price_unit'      => $item->get_total() / $quantity,
 			);
 		}
-
 		// Get fees.
 		foreach ( $order->get_items( 'fee' ) as $fee_id => $fee ) {
 			$order_data['fees'][] = array(
@@ -248,7 +268,6 @@ function send_order_details_to_odoo( $order_id, $old_status, $new_status ) {
 				'total' => $fee->get_amount(),
 			);
 		}
-
 		// Set the external API URL.
 		$odoo_api_url = ODOO_BASE . 'api/sale.order/add_update_order';
 
