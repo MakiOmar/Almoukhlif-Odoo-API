@@ -109,7 +109,7 @@ function odoo_check_stock_before_add_to_cart( $passed, $product_id, $quantity, $
 	$stock_body = json_encode(
 		array(
 			'default_code' => $sku,
-			//'location_id'  => 70,
+			// 'location_id'  => 70,
 		)
 	);
 
@@ -179,14 +179,15 @@ function send_order_details_to_odoo( $order_id, $old_status, $new_status ) {
 	// Check if the new status is `completed`.
 	if ( 'completed' === $new_status ) {
 		$odoo_order = get_post_meta( $order_id, 'odoo_order', true );
+
 		if ( ! empty( $odoo_order ) && is_numeric( $odoo_order ) ) {
 			return;
 		}
 
 		$token = get_odoo_auth_token();
-
 		if ( ! $token ) {
 			$message = "Order {$order_id} failed to be sent to Odoo.";
+			error_log( $message );
 			add_action(
 				'admin_notices',
 				function () use ( $message ) {
@@ -222,11 +223,6 @@ function send_order_details_to_odoo( $order_id, $old_status, $new_status ) {
 			'fees'           => array(),
 			'tax'            => $order->get_total_tax(),
 			'discount'       => $order->get_discount_total(),
-			'shipping'       => array(
-				'total'  => $order->get_shipping_total(),
-				'tax'    => $order->get_shipping_tax(),
-				'method' => $order->get_shipping_method(),
-			),
 		);
 
 		foreach ( $order->get_items( 'line_item' ) as $item_id => $item ) {
@@ -261,6 +257,14 @@ function send_order_details_to_odoo( $order_id, $old_status, $new_status ) {
 				'price_unit'      => $item->get_total() / $quantity,
 			);
 		}
+
+		$order_data['order_line'][] = array(
+			'default_code'    => '1000000',
+			'name'            => 'شحن',
+			'product_uom_qty' => 1, // Adjusted quantity with multiplier.
+			'price_unit'      => $order->get_shipping_total(),
+		);
+
 		// Get fees.
 		foreach ( $order->get_items( 'fee' ) as $fee_id => $fee ) {
 			$order_data['fees'][] = array(
@@ -287,10 +291,10 @@ function send_order_details_to_odoo( $order_id, $old_status, $new_status ) {
 
 		$order_body_response = wp_remote_retrieve_body( $response );
 		$order_body          = json_decode( $order_body_response );
-
 		// Check for errors.
-		if ( is_wp_error( $response ) ) {
+		if ( ! $response || is_wp_error( $response ) ) {
 			$message = 'Order ' . $order_id . ' transfer to Odoo failed: ' . $response->get_error_message();
+			error_log( $message );
 			add_action(
 				'admin_notices',
 				function () use ( $message ) {
@@ -312,6 +316,8 @@ function send_order_details_to_odoo( $order_id, $old_status, $new_status ) {
 					echo '<div class="notice notice-success"><p>' . esc_html( $message ) . '</p></div>';
 				}
 			);
+		} else {
+			error_log( 'حدث خطأ ما' );
 		}
 	}
 }
