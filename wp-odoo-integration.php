@@ -72,7 +72,7 @@ function get_odoo_auth_token() {
  * @param array   $variation         Variation data.
  * @return bool Whether the add-to-cart action should proceed.
  */
-function odoo_check_stock_before_add_to_cart( $passed, $product_id, $quantity, $variation_id, $variation ) {
+function odoo_check_stock_before_add_to_cart( $passed, $product_id, $quantity, $variation_id = 0, $variation = null ) {
 	// Check if WooCommerce is active.
 	if ( ! class_exists( 'WooCommerce' ) ) {
 		return $passed;
@@ -272,6 +272,7 @@ function send_order_details_to_odoo( $order_id, $old_status, $new_status ) {
 				'total' => $fee->get_amount(),
 			);
 		}
+		error_log( print_r( $order_data, true ) );
 		// Set the external API URL.
 		$odoo_api_url = ODOO_BASE . 'api/sale.order/add_update_order';
 
