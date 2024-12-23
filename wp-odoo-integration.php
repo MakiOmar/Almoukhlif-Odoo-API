@@ -247,14 +247,14 @@ function send_order_details_to_odoo( $order_id, $old_status, $new_status ) {
 			}
 
 			// Multiply the quantity by the multiplier.
-			$quantity = $item->get_quantity() * $multiplier;
-
+			$quantity   = $item->get_quantity() * $multiplier;
+			$unit_price = $item->get_total() / $quantity;
 			// Add the line item to the order data.
 			$order_data['order_line'][] = array(
 				'default_code'    => $product->get_sku(),
 				'name'            => $item->get_name(),
 				'product_uom_qty' => $quantity, // Adjusted quantity with multiplier.
-				'price_unit'      => $item->get_total() / $quantity,
+				'price_unit'      => $unit_price + ( $unit_price * 0.15 ),
 			);
 		}
 
