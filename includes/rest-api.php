@@ -1,6 +1,6 @@
 <?php
 /**
- * REST API integration with Odoo for WooCommerce stock validation.
+ * REST API integration with Odoo for WooCommerce stock update.
  *
  * @package WordPress_Odoo_Integration
  */
@@ -10,50 +10,91 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
+add_filter(
+	'anony_theme_general_options',
+	function ( $general ) {
+		if ( class_exists( 'ANONY_SECURITY_KEYS' ) ) {
+			$key = ANONY_SECURITY_KEYS::generate_rest_api_key();
+		} else {
+			$key = '';
+		}
+		$general['fields'][] = array(
+			'id'       => 'rest_api_key',
+			'title'    => esc_html__( 'Api Key', 'smartpage' ),
+			'type'     => 'text',
+			'validate' => 'no_html',
+			'default'  => $key,
+		);
+		return $general;
+	}
+);
+
 /**
- * Registers the custom REST API endpoint for checking stock from Odoo.
+ * Permission callback for the update stock endpoint.
+ *
+ * Validates the API key sent in the request.
+ *
+ * @param WP_REST_Request $request The REST API request.
+ * @return bool True if the API key is valid, false otherwise.
  */
-function register_odoo_stock_check_endpoint() {
+function odoo_update_stock_permission_check( $request ) {
+	$options = get_option( 'Anony_Options' );
+	if ( ! is_array( $options ) || empty( $options['rest_api_key'] ) ) {
+		return false;
+	}
+	// Retrieve the API key from the headers.
+	$api_key = $request->get_header( 'x-api-key' );
+
+	// Replace 'your-secure-api-key' with the actual API key.
+	$valid_api_key = $options['rest_api_key'];
+
+	// Check if the provided API key matches the valid API key.
+	return $api_key && hash_equals( $valid_api_key, $api_key );
+}
+
+/**
+ * Registers the custom REST API endpoint for updating stock in WooCommerce.
+ */
+function register_odoo_update_stock_endpoint() {
 	register_rest_route(
 		'odoo/v1',
-		'/check-stock',
+		'/update-stock',
 		array(
-			'methods'             => 'GET',
-			'callback'            => 'odoo_check_stock_endpoint_handler',
+			'methods'             => 'POST',
+			'callback'            => 'odoo_update_stock_endpoint_handler',
 			'args'                => array(
-				'sku' => array(
+				'sku'   => array(
 					'required'          => true,
 					'validate_callback' => function ( $param ) {
 						return is_string( $param ) && ! empty( $param );
 					},
 				),
+				'stock' => array(
+					'required'          => true,
+					'validate_callback' => function ( $param ) {
+						return is_numeric( $param ) && $param >= 0;
+					},
+				),
 			),
-			'permission_callback' => '__return_true', // In production, replace with appropriate permission check.
+			'permission_callback' => 'odoo_update_stock_permission_check', // Replace with proper permission check in production.
 		)
 	);
 }
-add_action( 'rest_api_init', 'register_odoo_stock_check_endpoint' );
+add_action( 'rest_api_init', 'register_odoo_update_stock_endpoint' );
 
 /**
- * Handles the custom REST API endpoint request to retrieve WooCommerce stock by SKU.
+ * Handles the custom REST API endpoint request to update WooCommerce stock by SKU.
  *
- * Fetches stock information from WooCommerce for the given product SKU.
+ * Updates stock information in WooCommerce for the given product SKU.
  *
  * @param WP_REST_Request $request The REST API request.
- * @return WP_REST_Response The response containing WooCommerce stock data or an error message.
+ * @return WP_REST_Response The response containing the update result or an error message.
  */
-function odoo_check_stock_endpoint_handler( $request ) {
-	// Sanitize and retrieve the SKU parameter.
-	$sku = sanitize_text_field( $request->get_param( 'sku' ) );
-	// Return the WooCommerce stock data in the response.
-	return new WP_REST_Response(
-		array(
-			'success' => true,
-			'sku'     => $sku,
-			'stock'   => 5,
-		),
-		200
-	);
+function odoo_update_stock_endpoint_handler( $request ) {
+	// Sanitize and retrieve the SKU and stock parameters.
+	$sku   = sanitize_text_field( $request->get_param( 'sku' ) );
+	$stock = intval( $request->get_param( 'stock' ) );
+
 	// Find the WooCommerce product by SKU.
 	$product_id = wc_get_product_id_by_sku( $sku );
 	if ( ! $product_id ) {
@@ -66,17 +107,28 @@ function odoo_check_stock_endpoint_handler( $request ) {
 		);
 	}
 
-	// Get WooCommerce stock quantity for the product.
-	$product           = wc_get_product( $product_id );
-	$woocommerce_stock = $product->get_stock_quantity();
+	// Get the WooCommerce product and update its stock quantity.
+	$product = wc_get_product( $product_id );
+	if ( $product->managing_stock() ) {
+		$product->set_stock_quantity( $stock );
+		$product->save();
 
-	// Return the WooCommerce stock data in the response.
-	return new WP_REST_Response(
-		array(
-			'success' => true,
-			'sku'     => $sku,
-			'stock'   => (int) $woocommerce_stock,
-		),
-		200
-	);
+		return new WP_REST_Response(
+			array(
+				'success' => true,
+				'message' => 'Stock updated successfully.',
+				'sku'     => $sku,
+				'stock'   => $stock,
+			),
+			200
+		);
+	} else {
+		return new WP_REST_Response(
+			array(
+				'success' => false,
+				'message' => 'Product does not manage stock.',
+			),
+			400
+		);
+	}
 }
