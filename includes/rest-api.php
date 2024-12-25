@@ -80,7 +80,7 @@ function register_odoo_update_stock_endpoint() {
 		)
 	);
 	register_rest_route(
-		'woocommerce/v1',
+		'odoo/v1',
 		'/set-order-status',
 		array(
 			'methods'             => 'POST',
