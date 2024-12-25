@@ -79,9 +79,80 @@ function register_odoo_update_stock_endpoint() {
 			'permission_callback' => 'odoo_update_stock_permission_check', // Replace with proper permission check in production.
 		)
 	);
+	register_rest_route(
+		'woocommerce/v1',
+		'/set-order-status',
+		array(
+			'methods'             => 'POST',
+			'callback'            => 'set_order_status_handler',
+			'args'                => array(
+				'order_id' => array(
+					'required'          => true,
+					'validate_callback' => function ( $param ) {
+						return is_numeric( $param ) && $param > 0;
+					},
+				),
+				'status' => array(
+					'required'          => true,
+					'validate_callback' => function ( $param ) {
+						// Validate if it's a valid WooCommerce order status.
+						$valid_statuses = wc_get_order_statuses();
+						return isset( $valid_statuses[ 'wc-' . $param ] );
+					},
+				),
+			),
+			'permission_callback' => 'odoo_update_stock_permission_check',
+		)
+	);
 }
 add_action( 'rest_api_init', 'register_odoo_update_stock_endpoint' );
 
+/**
+ * Handles the request to set WooCommerce order status.
+ *
+ * @param WP_REST_Request $request The REST API request.
+ * @return WP_REST_Response The response indicating success or failure.
+ */
+function set_order_status_handler( $request ) {
+	$order_id = intval( $request->get_param( 'order_id' ) );
+	$status   = sanitize_text_field( $request->get_param( 'status' ) );
+
+	// Retrieve the order.
+	$order = wc_get_order( $order_id );
+
+	if ( ! $order ) {
+		return new WP_REST_Response(
+			array(
+				'success' => false,
+				'message' => 'Invalid order ID.',
+			),
+			404
+		);
+	}
+
+	// Update the order status.
+	try {
+		$order->update_status( $status, 'Status updated via REST API.', true );
+
+		return new WP_REST_Response(
+			array(
+				'success' => true,
+				'message' => 'Order status updated successfully.',
+				'order_id' => $order_id,
+				'status'   => $status,
+			),
+			200
+		);
+	} catch ( Exception $e ) {
+		return new WP_REST_Response(
+			array(
+				'success' => false,
+				'message' => 'Failed to update order status: ' . $e->getMessage(),
+			),
+			500
+		);
+	}
+}
 /**
  * Handles the custom REST API endpoint request to update WooCommerce stock by SKU.
  *
