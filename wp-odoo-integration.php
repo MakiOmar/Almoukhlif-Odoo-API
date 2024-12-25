@@ -109,7 +109,7 @@ function odoo_check_stock_before_add_to_cart( $passed, $product_id, $quantity, $
 	$stock_body = json_encode(
 		array(
 			'default_code' => $sku,
-			// 'location_id'  => 70,
+			'location_id'  => 104,
 		)
 	);
 
