@@ -17,6 +17,16 @@ define( 'ODOO_BASE', 'https://almokhlif-oud-live-staging-15355104.dev.odoo.com/'
 
 // Include REST API integration for Odoo.
 require_once plugin_dir_path( __FILE__ ) . 'includes/rest-api.php';
+
+require plugin_dir_path( __FILE__ ) . 'plugin-update-checker/plugin-update-checker.php';
+$anonyengine_update_checker = Puc_v4_Factory::buildUpdateChecker(
+	'https://github.com/MakiOmar/Almoukhlif-Odoo-API/',
+	__FILE__,
+	plugin_basename( __FILE__ )
+);
+// Set the branch that contains the stable release.
+$anonyengine_update_checker->setBranch( 'master' );
+
 /**
  * Generate Odoo authentication token.
  *
