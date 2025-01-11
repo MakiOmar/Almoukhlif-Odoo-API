@@ -201,6 +201,7 @@ function send_order_details_to_odoo( $order_id ) {
 		update_post_meta( $order_id, 'odoo_order', $odoo_order_id );
 		$success_message = "تم إرسال الطلب بنجاح إلى أودو برقم أودو ID: {$odoo_order_id}.";
 		$order->add_order_note( $success_message, false ); // تسجيل النجاح كملاحظة للطلب.
+		update_post_meta( $order_id, 'oodo-status', 'success' );
 	} else {
 		$error_message = 'فشل إرسال الطلب إلى أودو: رد غير متوقع.';
 		$order->add_order_note( $error_message, false ); // تسجيل الخطأ كملاحظة للطلب.
