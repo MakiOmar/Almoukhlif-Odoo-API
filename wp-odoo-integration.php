@@ -2,7 +2,7 @@
 /**
  * Plugin Name: WordPress/Odoo Integration
  * Description: Integrates WooCommerce with Odoo to validate stock before adding products to the cart.
- * Version: 1.14
+ * Version: 1.15
  * Author: Mohammad Omar
  *
  * @package Odod
@@ -38,32 +38,41 @@ function get_odoo_auth_token() {
 	$token         = get_transient( $transient_key );
 
 	if ( ! $token ) {
-		// Replace with actual API credentials and URL.
-		$response = wp_remote_post(
-			ODOO_AUTH_URL,
+		// Odoo API authentication endpoint.
+		$auth_url = ODOO_BASE . 'web/session/erp_authenticate';
+
+		// Authentication request body.
+		$auth_body = wp_json_encode(
 			array(
-				'body'    => array(
-					'username' => ODOO_USERNAME,
-					'password' => ODOO_PASSWORD,
-				),
-				'headers' => array(
-					'Content-Type' => 'application/json',
+				'params' => array(
+					'db'       => 'almokhlif-oud-live-staging-17381935',
+					'login'    => 'test_api@gmail.com',
+					'password' => '123',
 				),
 			)
 		);
 
-		if ( is_wp_error( $response ) ) {
-			return false;
-		}
+		// Send the authentication request.
+		$auth_response = wp_remote_post(
+			$auth_url,
+			array(
+				'headers' => array( 'Content-Type' => 'application/json' ),
+				'body'    => $auth_body,
+				'timeout' => 20,
+			)
+		);
 
-		$body = wp_remote_retrieve_body( $response );
-		$data = json_decode( $body, true );
+		// Check for errors in the response.
+		if ( ! is_wp_error( $auth_response ) ) {
+			$auth_body_response = wp_remote_retrieve_body( $auth_response );
+			$auth_data          = json_decode( $auth_body_response );
 
-		if ( isset( $data['token'] ) ) {
-			$token = $data['token'];
-			set_transient( $transient_key, $token, DAY_IN_SECONDS );
-		} else {
-			return false;
+			// Check if the token exists in the response.
+			if ( isset( $auth_data->result->token ) ) {
+				$token = $auth_data->result->token;
+				set_transient( $transient_key, $token, DAY_IN_SECONDS );
+				return $token;
+			}
 		}
 	}
 
