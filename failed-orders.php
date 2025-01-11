@@ -79,7 +79,7 @@ function display_odoo_failed_orders_page() {
 								<td><input type="checkbox" name="order_ids[]" value="<?php echo esc_attr( $order->get_id() ); ?>" /></td>
 								<td><?php echo esc_html( $order->get_id() ); ?></td>
 								<td><?php echo esc_html( $order_name ); ?></td>
-								<td><?php echo esc_html( wc_price( $order->get_total() ) ); ?></td>
+								<td><?php echo wc_price( $order->get_total() ); ?></td>
 								<td><?php echo esc_html( ucfirst( get_post_meta( $order->get_id(), 'oodo-status', true ) ) ); ?></td>
 								<td>
 									<a href="<?php echo esc_url( admin_url( 'post.php?post=' . $order->get_id() . '&action=edit' ) ); ?>">
