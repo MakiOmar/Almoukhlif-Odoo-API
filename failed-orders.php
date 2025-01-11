@@ -112,3 +112,44 @@ function display_odoo_failed_orders_page() {
 	</script>
 	<?php
 }
+
+
+/**
+ * Add a link with a count of failed orders to the admin bar.
+ */
+function add_failed_orders_admin_bar_item( $wp_admin_bar ) {
+	if ( ! current_user_can( 'manage_woocommerce' ) ) {
+		return;
+	}
+
+	// Fetch the count of failed Odoo orders.
+	$args = array(
+		'post_type'   => 'shop_order',
+		'post_status' => 'any',
+		'meta_query'  => array(
+			array(
+				'key'     => 'oodo-status',
+				'value'   => 'failed',
+				'compare' => '=',
+			),
+		),
+		'fields'      => 'ids',
+	);
+
+	$orders = get_posts( $args );
+	$count  = count( $orders );
+
+	// Add a menu item to the admin bar.
+	$wp_admin_bar->add_node(
+		array(
+			'id'    => 'failed_odoo_orders',
+			'title' => sprintf(
+				'<span style="background: red; color: white; padding: 3px 8px; border-radius: 3px;">%s (%d)</span>',
+				__( 'Failed Odoo Orders', 'text-domain' ),
+				$count
+			),
+			'href'  => admin_url( 'admin.php?page=odoo-failed-orders' ),
+		)
+	);
+}
+add_action( 'admin_bar_menu', 'add_failed_orders_admin_bar_item', 100 );
