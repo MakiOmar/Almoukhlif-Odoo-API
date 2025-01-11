@@ -13,10 +13,11 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'ODOO_BASE', 'https://almokhlif-oud-live-staging-15355104.dev.odoo.com/' );
+define( 'ODOO_BASE', 'https://almokhlif-oud-live-staging-17381935.dev.odoo.com/' );
 
 // Include REST API integration for Odoo.
 require_once plugin_dir_path( __FILE__ ) . 'includes/rest-api.php';
+require_once plugin_dir_path( __FILE__ ) . 'failed-orders.php';
 
 require plugin_dir_path( __FILE__ ) . 'plugin-update-checker/plugin-update-checker.php';
 $anonyengine_update_checker = Puc_v4_Factory::buildUpdateChecker(
@@ -40,8 +41,8 @@ function get_odoo_auth_token() {
 	$auth_body = wp_json_encode(
 		array(
 			'params' => array(
-				'db'       => 'almokhlif-oud-live-staging-15355104',
-				'login'    => 'hussam.elsayed@almokhlifoud.com',
+				'db'       => 'almokhlif-oud-live-staging-17381935',
+				'login'    => 'test_api@gmail.com',
 				'password' => '123',
 			),
 		)
@@ -166,173 +167,143 @@ function odoo_check_stock_before_add_to_cart( $passed, $product_id, $quantity, $
 }
 
 
-add_filter( 'woocommerce_add_to_cart_validation', 'odoo_check_stock_before_add_to_cart', 10, 5 );
-
-/**
- * Send order payment details to an external API when the order status changes to `odoo_transfered`.
- *
- * @package WordPress_Odoo_Integration
- */
-
-
 /**
  * Send order payment details to an external API after order status changes to `odoo_transfered`.
  *
  * This function triggers when an order status changes to `odoo_transfered`, gathers order details,
  * and sends them to the specified external API endpoint in JSON format.
  *
- * @param int    $order_id   The ID of the order.
- * @param string $old_status The old status of the order.
- * @param string $new_status The new status of the order.
+ * @param int $order_id   The ID of the order.
  */
-function send_order_details_to_odoo( $order_id, $old_status, $new_status ) {
-	// Check if the new status is `completed`.
-	if ( 'completed' === $new_status ) {
-		$odoo_order = get_post_meta( $order_id, 'odoo_order', true );
+function send_order_details_to_odoo( $order_id ) {
+	// التحقق مما إذا كان الطلب قد تم إرساله بالفعل إلى Odoo.
+	$odoo_order = get_post_meta( $order_id, 'odoo_order', true );
 
-		if ( ! empty( $odoo_order ) && is_numeric( $odoo_order ) ) {
-			return;
+	if ( ! empty( $odoo_order ) && is_numeric( $odoo_order ) ) {
+		return;
+	}
+
+	// الحصول على رمز التوثيق من Odoo.
+	$token = get_odoo_auth_token();
+	if ( ! $token ) {
+		$message = "فشل إرسال الطلب {$order_id} إلى Odoo: رمز التوثيق غير موجود.";
+		$order   = wc_get_order( $order_id );
+		$order->add_order_note( $message, false ); // تسجيل الخطأ كملاحظة للطلب.
+		update_post_meta( $order_id, 'oodo-status', 'failed' );
+		return false;
+	}
+
+	// جلب تفاصيل الطلب.
+	$order = wc_get_order( $order_id );
+
+	// إعداد بيانات الطلب لإرسالها إلى أودو.
+	$order_data = array(
+		'manual_confirm' => true,
+		'state'          => 'draft',
+		'order_line'     => array(),
+		'order_id'       => $order->get_id(),
+		'total'          => $order->get_total(),
+		'currency'       => $order->get_currency(),
+		'note'           => $order->get_customer_note(),
+		'billing'        => array(
+			'first_name' => $order->get_billing_first_name(),
+			'last_name'  => $order->get_billing_last_name(),
+			'address_1'  => $order->get_billing_address_1(),
+			'address_2'  => $order->get_billing_address_2(),
+			'city'       => $order->get_billing_city(),
+			'state'      => $order->get_billing_state(),
+			'postcode'   => $order->get_billing_postcode(),
+			'country'    => $order->get_billing_country(),
+			'email'      => $order->get_billing_email(),
+			'phone'      => $order->get_billing_phone(),
+		),
+		'fees'           => array(),
+		'tax'            => $order->get_total_tax(),
+		'discount'       => $order->get_discount_total(),
+	);
+
+	// إضافة عناصر الطلب (المنتجات) إلى بيانات الطلب.
+	foreach ( $order->get_items( 'line_item' ) as $item_id => $item ) {
+		$product    = $item->get_product();
+		$product_id = $product->get_id();
+		$multiplier = 1;
+
+		// إذا كان المنتج نوعه "متغير"، يتم تطبيق المضاعف.
+		if ( $product->is_type( 'variation' ) ) {
+			$multiplier = (float) get_post_meta( $product_id, '_stock_multiplier', true );
+			$multiplier = $multiplier > 0 ? $multiplier : 1;
 		}
 
-		$token = get_odoo_auth_token();
-		if ( ! $token ) {
-			$message = "Order {$order_id} failed to be sent to Odoo.";
-			error_log( $message );
-			add_action(
-				'admin_notices',
-				function () use ( $message ) {
-					echo '<div class="notice notice-error"><p>' . esc_html( $message ) . '</p></div>';
-				}
-			);
-			return false;
-		}
-
-		// Get the order object.
-		$order = wc_get_order( $order_id );
-
-		// Prepare the order data.
-		$order_data = array(
-			'manual_confirm' => true,
-			'state'          => 'draft',
-			'order_line'     => array(),
-			'order_id'       => $order->get_id(),
-			'total'          => $order->get_total(),
-			'currency'       => $order->get_currency(),
-			'billing'        => array(
-				'first_name' => $order->get_billing_first_name(),
-				'last_name'  => $order->get_billing_last_name(),
-				'address_1'  => $order->get_billing_address_1(),
-				'address_2'  => $order->get_billing_address_2(),
-				'city'       => $order->get_billing_city(),
-				'state'      => $order->get_billing_state(),
-				'postcode'   => $order->get_billing_postcode(),
-				'country'    => $order->get_billing_country(),
-				'email'      => $order->get_billing_email(),
-				'phone'      => $order->get_billing_phone(),
-			),
-			'fees'           => array(),
-			'tax'            => $order->get_total_tax(),
-			'discount'       => $order->get_discount_total(),
-		);
-
-		foreach ( $order->get_items( 'line_item' ) as $item_id => $item ) {
-			// Get the product associated with the line item.
-			$product = $item->get_product();
-
-			// Get the product ID.
-			$product_id = $product->get_id();
-
-			// Initialize the multiplier.
-			$multiplier = 1;
-
-			// Check if the product is a variation.
-			if ( $product->is_type( 'variation' ) ) {
-				// Get the `_stock_multiplier` meta value.
-				$multiplier = (float) get_post_meta( $product_id, '_stock_multiplier', true );
-
-				// Default multiplier to 1 if not set or invalid.
-				if ( empty( $multiplier ) || $multiplier <= 0 ) {
-					$multiplier = 1;
-				}
-			}
-
-			// Multiply the quantity by the multiplier.
-			$quantity   = $item->get_quantity() * $multiplier;
-			$unit_price = $item->get_total() / $quantity;
-			// Add the line item to the order data.
-			$order_data['order_line'][] = array(
-				'default_code'    => $product->get_sku(),
-				'name'            => $item->get_name(),
-				'product_uom_qty' => $quantity, // Adjusted quantity with multiplier.
-				'price_unit'      => $unit_price + ( $unit_price * 0.15 ),
-			);
-		}
+		$quantity   = $item->get_quantity() * $multiplier;
+		$unit_price = $item->get_total() / $quantity;
 
 		$order_data['order_line'][] = array(
-			'default_code'    => '1000000',
-			'name'            => 'شحن',
-			'product_uom_qty' => 1, // Adjusted quantity with multiplier.
-			'price_unit'      => $order->get_shipping_total(),
+			'default_code'    => $product->get_sku(),
+			'name'            => $item->get_name(),
+			'product_uom_qty' => $quantity,
+			'price_unit'      => $unit_price + ( $unit_price * 0.15 ),
 		);
+	}
 
-		// Get fees.
-		foreach ( $order->get_items( 'fee' ) as $fee_id => $fee ) {
-			$order_data['fees'][] = array(
-				'name'  => $fee->get_name(),
-				'total' => $fee->get_amount(),
-			);
-		}
-		error_log( print_r( $order_data, true ) );
-		// Set the external API URL.
-		$odoo_api_url = ODOO_BASE . 'api/sale.order/add_update_order';
+	// إضافة تكلفة الشحن إلى بيانات الطلب.
+	$order_data['order_line'][] = array(
+		'default_code'    => '1000000',
+		'name'            => 'شحن',
+		'product_uom_qty' => 1,
+		'price_unit'      => $order->get_shipping_total(),
+	);
 
-		// Send the data to the external API.
-		$response = wp_remote_post(
-			$odoo_api_url,
-			array(
-				'method'  => 'POST',
-				'body'    => wp_json_encode( $order_data ),
-				'headers' => array(
-					'Content-Type' => 'application/json',
-					'token'        => $token,
-				),
-				'timeout' => 20,
-			)
+	// إضافة الرسوم الأخرى إلى بيانات الطلب.
+	foreach ( $order->get_items( 'fee' ) as $fee_id => $fee ) {
+		$order_data['fees'][] = array(
+			'name'  => $fee->get_name(),
+			'total' => $fee->get_amount(),
 		);
+	}
 
-		$order_body_response = wp_remote_retrieve_body( $response );
-		$order_body          = json_decode( $order_body_response );
-		// Check for errors.
-		if ( ! $response || is_wp_error( $response ) ) {
-			$message = 'Order ' . $order_id . ' transfer to Odoo failed: ' . $response->get_error_message();
-			error_log( $message );
-			add_action(
-				'admin_notices',
-				function () use ( $message ) {
-					echo '<div class="notice notice-error"><p>' . esc_html( $message ) . '</p></div>';
-				}
-			);
-		}
+	// رابط API الخاص بـ أودو.
+	$odoo_api_url = ODOO_BASE . 'api/sale.order/add_update_order';
 
-		// Check if the response is successful.
-		if ( isset( $order_body->result->Code ) && 200 === $order_body->result->Code ) {
-			// Extract the ID from the response and save it as order meta.
-			$odoo_order_id = $order_body->result->Data->ID;
-			update_post_meta( $order_id, 'odoo_order', $odoo_order_id );
+	// إرسال البيانات إلى أودو باستخدام wp_remote_post.
+	$response = wp_remote_post(
+		$odoo_api_url,
+		array(
+			'method'  => 'POST',
+			'body'    => wp_json_encode( $order_data ),
+			'headers' => array(
+				'Content-Type' => 'application/json',
+				'token'        => $token,
+			),
+			'timeout' => 20,
+		)
+	);
 
-			$message = "Order {$order_id} successfully transferred to Odoo with Odoo ID {$odoo_order_id}.";
-			add_action(
-				'admin_notices',
-				function () use ( $message ) {
-					echo '<div class="notice notice-success"><p>' . esc_html( $message ) . '</p></div>';
-				}
-			);
-		} else {
-			error_log( 'حدث خطأ ما' );
-		}
+	// معالجة الرد من أودو.
+	$order_body_response = wp_remote_retrieve_body( $response );
+	$order_body          = json_decode( $order_body_response );
+
+	// التحقق من وجود خطأ في الرد.
+	if ( ! $response || is_wp_error( $response ) ) {
+		$error_message = 'فشل إرسال الطلب إلى أودو: ' . $response->get_error_message();
+		$order->add_order_note( $error_message, false ); // تسجيل الخطأ كملاحظة للطلب.
+		update_post_meta( $order_id, 'oodo-status', 'failed' );
+		return;
+	}
+
+	// التحقق من نجاح الرد.
+	if ( isset( $order_body->result->Code ) && 200 === $order_body->result->Code ) {
+		$odoo_order_id = $order_body->result->Data->ID;
+		update_post_meta( $order_id, 'odoo_order', $odoo_order_id );
+		$success_message = "تم إرسال الطلب بنجاح إلى أودو برقم أودو ID: {$odoo_order_id}.";
+		$order->add_order_note( $success_message, false ); // تسجيل النجاح كملاحظة للطلب.
+	} else {
+		$error_message = 'فشل إرسال الطلب إلى أودو: رد غير متوقع.';
+		$order->add_order_note( $error_message, false ); // تسجيل الخطأ كملاحظة للطلب.
+		update_post_meta( $order_id, 'oodo-status', 'failed' );
 	}
 }
-add_action( 'woocommerce_order_status_changed', 'send_order_details_to_odoo', 10, 3 );
+
+add_action( 'woocommerce_thankyou', 'send_order_details_to_odoo' );
 
 
 /**
