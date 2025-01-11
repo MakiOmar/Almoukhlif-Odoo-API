@@ -2,7 +2,7 @@
 /**
  * Plugin Name: WordPress/Odoo Integration
  * Description: Integrates WooCommerce with Odoo to validate stock before adding products to the cart.
- * Version: 1.12
+ * Version: 1.13
  * Author: Mohammad Omar
  *
  * @package Odod
@@ -29,142 +29,47 @@ $anonyengine_update_checker = Puc_v4_Factory::buildUpdateChecker(
 $anonyengine_update_checker->setBranch( 'master' );
 
 /**
- * Generate Odoo authentication token.
+ * Get Odoo authentication token, storing it in a transient for 24 hours.
  *
- * @return string|false The token if successful, or false if there is an error.
+ * @return string|false The authentication token, or false on failure.
  */
 function get_odoo_auth_token() {
-	// Odoo API authentication endpoint.
-	$auth_url = ODOO_BASE . 'web/session/erp_authenticate';
-
-	// Authentication request body.
-	$auth_body = wp_json_encode(
-		array(
-			'params' => array(
-				'db'       => 'almokhlif-oud-live-staging-17381935',
-				'login'    => 'test_api@gmail.com',
-				'password' => '123',
-			),
-		)
-	);
-
-	// Send the authentication request.
-	$auth_response = wp_remote_post(
-		$auth_url,
-		array(
-			'headers' => array( 'Content-Type' => 'application/json' ),
-			'body'    => $auth_body,
-			'timeout' => 20,
-		)
-	);
-
-	// Check for errors in the response.
-	if ( ! is_wp_error( $auth_response ) ) {
-		$auth_body_response = wp_remote_retrieve_body( $auth_response );
-		$auth_data          = json_decode( $auth_body_response );
-
-		// Check if the token exists in the response.
-		if ( isset( $auth_data->result->token ) ) {
-			return $auth_data->result->token;
-		}
-	}
-	return false;
-}
-/**
- * Check stock from Odoo before allowing a product to be added to the WooCommerce cart.
- *
- * This function fetches the product SKU and calls an Odoo API endpoint to verify stock levels.
- * If the Odoo stock is less than the WooCommerce stock, the product is prevented from being added to the cart.
- *
- * @param bool    $passed     Whether the add-to-cart action should proceed.
- * @param int     $product_id The ID of the product being added to the cart.
- * @param int     $quantity   The quantity of the product.
- * @param integer $variation_id      Variation ID being added to the cart.
- * @param array   $variation         Variation data.
- * @return bool Whether the add-to-cart action should proceed.
- */
-function odoo_check_stock_before_add_to_cart( $passed, $product_id, $quantity, $variation_id = 0, $variation = null ) {
-	// Check if WooCommerce is active.
-	if ( ! class_exists( 'WooCommerce' ) ) {
-		return $passed;
-	}
-	// Get the product SKU.
-	$product = wc_get_product( $product_id );
-	$sku     = $product->get_sku();
-	// Check if the product is a variation.
-	if ( $variation_id ) {
-		// Get the parent (main) product object.
-		$variation  = wc_get_product( $variation_id );
-		$multiplier = $variation->get_meta( '_stock_multiplier' );
-	} else {
-		// Use the simple product's SKU.
-		$multiplier = 1;
-	}
-	$quantity = $quantity * $multiplier;
-	$message  = 'لا يمكن استرجاع معلومات المخزون. يرجى المحاولة لاحقًا.';
-	// Fetch the authentication token.
-	$token = get_odoo_auth_token();
+	$transient_key = 'odoo_auth_token';
+	$token         = get_transient( $transient_key );
 
 	if ( ! $token ) {
-		if ( function_exists( 'teamlog' ) ) {
-			teamlog( $message );
+		// Replace with actual API credentials and URL.
+		$response = wp_remote_post(
+			ODOO_AUTH_URL,
+			array(
+				'body'    => array(
+					'username' => ODOO_USERNAME,
+					'password' => ODOO_PASSWORD,
+				),
+				'headers' => array(
+					'Content-Type' => 'application/json',
+				),
+			)
+		);
+
+		if ( is_wp_error( $response ) ) {
+			return false;
 		}
-		wc_add_notice( $message, 'error' );
-		return false;
-	}
 
-	// Odoo API stock endpoint.
-	$stock_url = ODOO_BASE . 'api/stock.quant/get_available_qty_data';
+		$body = wp_remote_retrieve_body( $response );
+		$data = json_decode( $body, true );
 
-	// Prepare the request body for stock data.
-	$stock_body = json_encode(
-		array(
-			'default_code' => $sku,
-			'location_id'  => 104,
-		)
-	);
-
-	// Send the stock request.
-	$stock_response = wp_remote_post(
-		$stock_url,
-		array(
-			'headers' => array(
-				'Content-Type' => 'application/json',
-				'token'        => $token,
-			),
-			'body'    => $stock_body,
-			'timeout' => 20,
-		)
-	);
-
-	if ( is_wp_error( $stock_response ) ) {
-		wc_add_notice( $message, 'error' );
-		return false;
-	}
-
-	$stock_body_response = wp_remote_retrieve_body( $stock_response );
-	$stock_data          = json_decode( $stock_body_response );
-	if ( ! isset( $stock_data->result->Data ) || ! is_array( $stock_data->result->Data ) ) {
-		wc_add_notice( $message, 'error' );
-		return false;
-	}
-	// Calculate total positive stock quantity.
-	$total_stock = 0;
-	foreach ( $stock_data->result->Data as $stock_item ) {
-		$q = (int) $stock_item->forecasted_quantity;
-		if ( $q > 0 ) {
-			$total_stock += $q;
+		if ( isset( $data['token'] ) ) {
+			$token = $data['token'];
+			set_transient( $transient_key, $token, DAY_IN_SECONDS );
+		} else {
+			return false;
 		}
 	}
-	// Compare Odoo stock with WooCommerce stock.
-	if ( absint( $total_stock ) < absint( $quantity ) ) {
-		$message = 'مخزون المنتج محدود. يرجى التواصل مع الدعم للحصول على مزيد من المعلومات.';
-		wc_add_notice( $message, 'error' );
-		return false; // Prevent adding to cart.
-	}
 
-	return $passed; // Allow adding to cart if all checks pass.
+	return $token;
 }
+
 
 
 /**
