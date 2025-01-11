@@ -138,14 +138,15 @@ function add_failed_orders_admin_bar_item( $wp_admin_bar ) {
 
 	$orders = get_posts( $args );
 	$count  = count( $orders );
-
+	$color  = $count > 0 ? 'red' : 'green';
 	// Add a menu item to the admin bar.
 	$wp_admin_bar->add_node(
 		array(
 			'id'    => 'failed_odoo_orders',
 			'title' => sprintf(
-				'<span style="background: red; color: white; padding: 3px 8px; border-radius: 3px;">%s (%d)</span>',
-				__( 'Failed Odoo Orders', 'text-domain' ),
+				'<span style="background: %s; color: white; padding: 3px 8px; border-radius: 3px;">%s (%d)</span>',
+				$color,
+				esc_html__( 'Failed Odoo Orders', 'text-domain' ),
 				$count
 			),
 			'href'  => admin_url( 'admin.php?page=odoo-failed-orders' ),
