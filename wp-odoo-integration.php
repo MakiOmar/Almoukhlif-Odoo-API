@@ -2,7 +2,7 @@
 /**
  * Plugin Name: WordPress/Odoo Integration
  * Description: Integrates WooCommerce with Odoo to validate stock before adding products to the cart.
- * Version: 1.163
+ * Version: 1.164
  * Author: Mohammad Omar
  *
  * @package Odod
@@ -235,7 +235,11 @@ function send_orders_batch_to_odoo( $order_ids ) {
 	// الحصول على رمز التوثيق من Odoo.
 	$token = get_odoo_auth_token();
 	if ( ! $token ) {
-		error_log( 'فشل إرسال الطلبات إلى Odoo: رمز التوثيق غير موجود.' );
+		if ( function_exists( 'teamlog' ) ) {
+			teamlog( 'فشل إرسال الطلبات إلى Odoo: رمز التوثيق غير موجود.' );
+		} else {
+			error_log( 'فشل إرسال الطلبات إلى Odoo: رمز التوثيق غير موجود.' );
+		}
 		return false;
 	}
 
@@ -348,7 +352,12 @@ function send_orders_batch_to_odoo( $order_ids ) {
 	$response_data = json_decode( $response_body );
 
 	if ( is_wp_error( $response ) || empty( $response_data ) || ! isset( $response_data->result->Code ) || 200 !== $response_data->result->Code ) {
-		error_log( 'فشل إرسال الطلبات إلى Odoo: رد غير متوقع.' );
+		if ( function_exists( 'teamlog' ) ) {
+			teamlog( 'فشل إرسال الطلبات إلى Odoo: رد غير متوقع.' );
+		} else {
+			error_log( 'فشل إرسال الطلبات إلى Odoo: رد غير متوقع.' );
+		}
+
 		return;
 	}
 
