@@ -2,7 +2,7 @@
 /**
  * Plugin Name: WordPress/Odoo Integration
  * Description: Integrates WooCommerce with Odoo to validate stock before adding products to the cart.
- * Version: 1.161
+ * Version: 1.162
  * Author: Mohammad Omar
  *
  * @package Odod
@@ -112,14 +112,14 @@ function send_order_details_to_odoo( $order_id ) {
 
 	// إعداد بيانات الطلب لإرسالها إلى أودو.
 	$order_data = array(
-		'manual_confirm' => true,
-		'state'          => 'draft',
-		'order_line'     => array(),
-		'order_id'       => $order->get_id(),
-		'total'          => $order->get_total(),
-		'currency'       => $order->get_currency(),
-		'note'           => $order->get_customer_note(),
-		'billing'        => array(
+		'woo_commerce_id' => $order->get_id(),
+		'manual_confirm'  => true,
+		'note'            => $order->get_customer_note(),
+		'state'           => 'draft',
+		'order_line'      => array(),
+		'total'           => $order->get_total(),
+		'currency'        => $order->get_currency(),
+		'billing'         => array(
 			'first_name' => $order->get_billing_first_name(),
 			'last_name'  => $order->get_billing_last_name(),
 			'address_1'  => $order->get_billing_address_1(),
@@ -131,9 +131,9 @@ function send_order_details_to_odoo( $order_id ) {
 			'email'      => $order->get_billing_email(),
 			'phone'      => $order->get_billing_phone(),
 		),
-		'fees'           => array(),
-		'tax'            => $order->get_total_tax(),
-		'discount'       => $order->get_discount_total(),
+		'fees'            => array(),
+		'tax'             => $order->get_total_tax(),
+		'discount'        => $order->get_discount_total(),
 	);
 
 	// إضافة عناصر الطلب (المنتجات) إلى بيانات الطلب.
@@ -251,14 +251,14 @@ function send_orders_batch_to_odoo( $order_ids ) {
 		}
 
 		$order_data = array(
-			'manual_confirm' => true,
-			'state'          => 'draft',
-			'order_line'     => array(),
-			'order_id'       => $order->get_id(),
-			'total'          => $order->get_total(),
-			'currency'       => $order->get_currency(),
-			'note'           => $order->get_customer_note(),
-			'billing'        => array(
+			'manual_confirm'  => true,
+			'state'           => 'draft',
+			'order_line'      => array(),
+			'woo_commerce_id' => $order->get_id(),
+			'total'           => $order->get_total(),
+			'currency'        => $order->get_currency(),
+			'note'            => $order->get_customer_note(),
+			'billing'         => array(
 				'first_name' => $order->get_billing_first_name(),
 				'last_name'  => $order->get_billing_last_name(),
 				'address_1'  => $order->get_billing_address_1(),
@@ -270,9 +270,9 @@ function send_orders_batch_to_odoo( $order_ids ) {
 				'email'      => $order->get_billing_email(),
 				'phone'      => $order->get_billing_phone(),
 			),
-			'fees'           => array(),
-			'tax'            => $order->get_total_tax(),
-			'discount'       => $order->get_discount_total(),
+			'fees'            => array(),
+			'tax'             => $order->get_total_tax(),
+			'discount'        => $order->get_discount_total(),
 		);
 
 		// إضافة عناصر الطلب (المنتجات) إلى بيانات الطلب.
@@ -349,7 +349,7 @@ function send_orders_batch_to_odoo( $order_ids ) {
 
 	// تحديث الطلبات الناجحة.
 	foreach ( $response_data->result->Data as $odoo_order ) {
-		$order_id = $odoo_order->order_id;
+		$order_id = $odoo_order->woo_commerce_id;
 		update_post_meta( $order_id, 'odoo_order', $odoo_order->ID );
 		update_post_meta( $order_id, 'oodo-status', 'success' );
 		$order = wc_get_order( $order_id );

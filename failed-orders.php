@@ -25,9 +25,7 @@ add_action( 'admin_menu', 'odoo_failed_orders_admin_page' );
  */
 function process_odoo_bulk_send_form() {
 	if ( isset( $_POST['bulk_send_odoo'] ) && ! empty( $_POST['order_ids'] ) ) {
-		foreach ( $_POST['order_ids'] as $order_id ) {
-			send_order_details_to_odoo( intval( $order_id ) );
-		}
+		send_orders_batch_to_odoo( $_POST['order_ids'] );
 		echo '<div class="updated"><p>' . esc_html__( 'Selected orders have been sent to Odoo.', 'text-domain' ) . '</p></div>';
 	}
 }
