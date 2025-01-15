@@ -2,7 +2,7 @@
 /**
  * Plugin Name: WordPress/Odoo Integration
  * Description: Integrates WooCommerce with Odoo to validate stock before adding products to the cart.
- * Version: 1.165
+ * Version: 1.166
  * Author: Mohammad Omar
  *
  * @package Odod
@@ -18,6 +18,7 @@ define( 'ODOO_BASE', 'https://almokhlif-oud-live-staging-17381935.dev.odoo.com/'
 // Include REST API integration for Odoo.
 require_once plugin_dir_path( __FILE__ ) . 'includes/rest-api.php';
 require_once plugin_dir_path( __FILE__ ) . 'failed-orders.php';
+require_once plugin_dir_path( __FILE__ ) . 'odoo.php';
 
 require plugin_dir_path( __FILE__ ) . 'plugin-update-checker/plugin-update-checker.php';
 $anonyengine_update_checker = Puc_v4_Factory::buildUpdateChecker(
