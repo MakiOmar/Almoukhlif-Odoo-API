@@ -112,7 +112,6 @@ function odoo_check_stock_before_add_to_cart( $passed, $product_id, $quantity, $
 	$message  = 'لا يمكن استرجاع معلومات المخزون. يرجى المحاولة لاحقًا.';
 	// Fetch the authentication token.
 	$token = get_odoo_auth_token();
-
 	if ( ! $token ) {
 		if ( function_exists( 'teamlog' ) ) {
 			teamlog( $message );
@@ -128,7 +127,7 @@ function odoo_check_stock_before_add_to_cart( $passed, $product_id, $quantity, $
 	$stock_body = json_encode(
 		array(
 			'default_code' => $sku,
-			'location_id'  => 104,
+			'location_id'  => 157,
 		)
 	);
 
@@ -159,11 +158,12 @@ function odoo_check_stock_before_add_to_cart( $passed, $product_id, $quantity, $
 	// Calculate total positive stock quantity.
 	$total_stock = 0;
 	foreach ( $stock_data->result->Data as $stock_item ) {
-		$q = (int) $stock_item->forecasted_quantity;
+		$q = (int) $stock_item->available_quantity;
 		if ( $q > 0 ) {
 			$total_stock += $q;
 		}
 	}
+	teamlog( print_r( array( $stock_item ), true ) );
 	// Compare Odoo stock with WooCommerce stock.
 	if ( absint( $total_stock ) < absint( $quantity ) ) {
 		$message = 'مخزون المنتج محدود. يرجى التواصل مع الدعم للحصول على مزيد من المعلومات.';
@@ -196,6 +196,7 @@ function update_odoo_stock( $sku, $product = null ) {
 	$request_body = wp_json_encode(
 		array(
 			'default_code' => $sku,
+			'location_id'  => 157,
 		)
 	);
 
@@ -226,15 +227,15 @@ function update_odoo_stock( $sku, $product = null ) {
 		$stock_data = $response_data->result->Data;
 
 		// We assume only one relevant entry in Data array for the stock.
-		if ( ! empty( $stock_data[0] ) && isset( $stock_data[0]->forecasted_quantity ) ) {
-			$forecasted_quantity = (float) $stock_data[0]->forecasted_quantity;
+		if ( ! empty( $stock_data[0] ) && isset( $stock_data[0]->available_quantity ) ) {
+			$forecasted_quantity = (float) $stock_data[0]->available_quantity;
 
 			// Use the provided product object or fetch it by SKU.
 			if ( is_null( $product ) ) {
 				$product_id = wc_get_product_id_by_sku( $sku );
 				$product    = $product_id ? wc_get_product( $product_id ) : null;
 			}
-
+			teamlog( $forecasted_quantity );
 			if ( $product ) {
 				wc_update_product_stock( $product, max( 0, (int) $forecasted_quantity ) ); // Set stock to 0 if negative.
 			}
@@ -294,7 +295,7 @@ function send_orders_batch_to_odoo( $order_ids ) {
 		$orders_temp[] = $order;
 		$order_data    = array(
 			'woo_commerce_id' => $order->get_id(),
-			'manual_confirm'  => true,
+			'manual_confirm'  => false,
 			'note'            => $order->get_customer_note(),
 			'state'           => 'draft',
 			'billing'         => array(
@@ -379,7 +380,6 @@ function send_orders_batch_to_odoo( $order_ids ) {
 	// معالجة الرد من أودو.
 	$response_body = wp_remote_retrieve_body( $response );
 	$response_data = json_decode( $response_body );
-
 	if ( is_wp_error( $response ) || empty( $response_data ) || ! isset( $response_data->result->Code ) || 200 !== $response_data->result->Code ) {
 		if ( function_exists( 'teamlog' ) ) {
 			teamlog( 'فشل إرسال الطلبات إلى Odoo: رد غير متوقع.' );
@@ -395,17 +395,25 @@ function send_orders_batch_to_odoo( $order_ids ) {
 	}
 	// تحديث الطلبات الناجحة.
 	foreach ( $response_data->result->Data as $odoo_order ) {
-		$order_id = $odoo_order->woo_commerce_id;
-		update_post_meta( $order_id, 'odoo_order', $odoo_order->ID );
-		update_post_meta( $order_id, 'oodo-status', 'success' );
-		$order = wc_get_order( $order_id );
-		$order->add_order_note( "تم إرسال الطلب بنجاح إلى أودو برقم أودو ID: {$odoo_order->ID}.", false );
-		foreach ( $order->get_items( 'line_item' ) as $item ) {
-			$product = $item->get_product();
-			if ( $product ) {
-				$sku = $product->get_sku();
-				update_odoo_stock( $sku, $product );
+		if ( $odoo_order->woo_commerce_id ) {
+			$order_id = $odoo_order->woo_commerce_id;
+			update_post_meta( $order_id, 'odoo_order', $odoo_order->ID );
+			update_post_meta( $order_id, 'oodo-status', 'success' );
+			$order = wc_get_order( $order_id );
+			if ( $order ) {
+				$order->add_order_note( "تم إرسال الطلب بنجاح إلى أودو برقم أودو ID: {$odoo_order->ID}.", false );
+				foreach ( $order->get_items( 'line_item' ) as $item ) {
+					$product = $item->get_product();
+					if ( $product ) {
+						$sku = $product->get_sku();
+						update_odoo_stock( $sku, $product );
+					}
+				}
+			} else {
+				teamlog( 'Order not found' );
 			}
+		} else {
+			teamlog( 'No woo_commerce_id' );
 		}
 	}
 }
@@ -435,19 +443,24 @@ add_action(
  * Cancel an order in Odoo.
  *
  * @param int $odoo_order_id The Odoo Order ID to cancel.
+ * @param int $order_id The WooCommerce order ID.
  * @return void
  */
-function cancel_odoo_order( $odoo_order_id ) {
-	$token = get_odoo_auth_token();
-	if ( ! $token ) {
-		if ( function_exists( 'teamlog' ) ) {
-			teamlog( 'Failed to cancel Odoo order: Missing authentication token.' );
-		} else {
-			error_log( 'Failed to cancel Odoo order: Missing authentication token.' );
-		}
+function cancel_odoo_order( $odoo_order_id, $order_id ) {
+	// Get the WooCommerce order object.
+	$order = wc_get_order( $order_id );
+	if ( ! $order ) {
 		return;
 	}
 
+	// Fetch Odoo authentication token.
+	$token = get_odoo_auth_token();
+	if ( ! $token ) {
+		$order->add_order_note( 'فشل في إلغاء الطلب في Odoo: رمز التوثيق غير موجود.', false );
+		return;
+	}
+
+	// Odoo API endpoint for canceling an order.
 	$cancel_url   = ODOO_BASE . 'api/sale.order/cancel_order';
 	$request_body = wp_json_encode(
 		array(
@@ -457,6 +470,7 @@ function cancel_odoo_order( $odoo_order_id ) {
 		)
 	);
 
+	// Send the cancellation request to Odoo API.
 	$response = wp_remote_post(
 		$cancel_url,
 		array(
@@ -469,39 +483,117 @@ function cancel_odoo_order( $odoo_order_id ) {
 		)
 	);
 
+	// Handle the response.
 	if ( is_wp_error( $response ) ) {
-		if ( function_exists( 'teamlog' ) ) {
-			teamlog( 'Failed to cancel Odoo order: ' . $response->get_error_message() );
-		} else {
-			error_log( 'Failed to cancel Odoo order: ' . $response->get_error_message() );
-		}
+		$order->add_order_note( 'فشل في إلغاء الطلب في Odoo: ' . $response->get_error_message(), false );
 		return;
 	}
 
-	$response_data = json_decode( wp_remote_retrieve_body( $response ) );
+	$response_data = json_decode( wp_remote_retrieve_body( $response ), true );
 
-	if ( isset( $response_data->result->Code ) && 200 === $response_data->result->Code ) {
-		if ( function_exists( 'teamlog' ) ) {
-			teamlog( 'Successfully canceled Odoo order with ID: ' . $odoo_order_id );
-		}
-	} elseif ( function_exists( 'teamlog' ) ) {
-			teamlog( 'Failed to cancel Odoo order: Unexpected response.' );
+	if ( isset( $response_data['result']['Code'] ) && 200 === $response_data['result']['Code'] ) {
+		// Log success as a private note.
+		$order->add_order_note( "تم إلغاء الطلب بنجاح في Odoo برقم: $odoo_order_id", false );
 	} else {
-		error_log( 'Failed to cancel Odoo order: Unexpected response.' );
+		// Log failure as a private note.
+		$order->add_order_note( "فشل في إلغاء الطلب في Odoo برقم: $odoo_order_id. الرد: " . wp_remote_retrieve_body( $response ), false );
 	}
 }
+
+
+/**
+ * إرسال الطلبات المكتملة إلى واجهة Odoo API للتحقق من التسليم.
+ *
+ * @param int $order_id رقم تعريف الطلب المكتمل في WooCommerce.
+ */
+function snks_validate_order_delivery_on_completion( $order_id ) {
+	// جلب الطلب في WooCommerce.
+	$order = wc_get_order( $order_id );
+	if ( ! $order ) {
+		return;
+	}
+
+	// جلب رقم الطلب في Odoo من الميتا الخاصة بالطلب في WooCommerce.
+	$odoo_order_id = get_post_meta( $order_id, 'odoo_order', true );
+
+	if ( ! $odoo_order_id ) {
+		$order->add_order_note( "لم يتم العثور على رقم الطلب في Odoo للطلب رقم: $order_id", false );
+		return;
+	}
+
+	// إعداد البيانات لإرسالها إلى واجهة Odoo API.
+	$data = array(
+		'orders' => array(
+			array(
+				'RequestID' => (string) $odoo_order_id,
+			),
+		),
+	);
+
+	// جلب رمز التوثيق من Odoo.
+	$token = get_odoo_auth_token();
+	if ( ! $token ) {
+		$order->add_order_note( 'فشل في إرسال البيانات إلى واجهة Odoo API: رمز التوثيق غير موجود.', false );
+		return;
+	}
+
+	// رابط واجهة Odoo API.
+	$url = ODOO_BASE . 'api/sale.order/validate_order_delivery';
+
+	// إرسال البيانات إلى Odoo API باستخدام wp_remote_post.
+	$response = wp_remote_post(
+		$url,
+		array(
+			'headers' => array(
+				'Content-Type' => 'application/json',
+				'token'        => $token,
+			),
+			'body'    => wp_json_encode( $data ),
+			'timeout' => 20,
+		)
+	);
+
+	// معالجة الرد.
+	if ( is_wp_error( $response ) ) {
+		$order->add_order_note( 'خطأ أثناء إرسال البيانات إلى واجهة Odoo API: ' . $response->get_error_message(), false );
+		return;
+	}
+
+	$response_body = wp_remote_retrieve_body( $response );
+	$response_data = json_decode( $response_body, true );
+
+	if ( isset( $response_data['result']['status'] ) && 'success' === $response_data['result']['status'] ) {
+		// تسجيل رسالة النجاح.
+		$message = $response_data['result']['message'] ?? 'تم التحقق من عملية تسليم الطلب بنجاح.';
+		$order->add_order_note( "نجاح واجهة Odoo API: $message", false );
+	} else {
+		// تسجيل الفشل مع الرد الكامل للتصحيح.
+		$order->add_order_note( "فشل في التحقق من تسليم الطلب في Odoo للطلب رقم: $odoo_order_id. الرد: $response_body", false );
+	}
+}
+
 
 /**
  * Hook to cancel Odoo order when WooCommerce order status changes to cancelled.
  */
 add_action(
-	'woocommerce_order_status_cancelled',
-	function ( $order_id ) {
-		$odoo_order_id = get_post_meta( $order_id, 'odoo_order', true );
-		if ( $odoo_order_id ) {
-			cancel_odoo_order( $odoo_order_id );
+	'woocommerce_order_status_changed',
+	function ( $order_id, $old_status, $new_status ) {
+		// Check if the new status is 'cancelled'.
+		if ( 'cancelled' === $new_status || 'was-canceled' === $new_status || 'wc-cancelled' === $new_status ) {
+			$odoo_order_id = get_post_meta( $order_id, 'odoo_order', true );
+			if ( $odoo_order_id ) {
+				cancel_odoo_order( $odoo_order_id );
+			}
 		}
-	}
+
+		if ( 'international-shi' === $new_status || 'was-shipped' === $new_status ) {
+			snks_validate_order_delivery_on_completion( $order_id );
+		}
+	},
+	10,
+	3 // Number of arguments passed to the callback (order ID, old status, new status).
 );
+
 
 add_filter( 'woocommerce_add_to_cart_validation', 'odoo_check_stock_before_add_to_cart', 10, 5 );
