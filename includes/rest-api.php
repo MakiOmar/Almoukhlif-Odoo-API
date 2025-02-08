@@ -92,7 +92,7 @@ function register_odoo_update_stock_endpoint() {
 						return is_numeric( $param ) && $param > 0;
 					},
 				),
-				'status' => array(
+				'status'   => array(
 					'required'          => true,
 					'validate_callback' => function ( $param ) {
 						// Validate if it's a valid WooCommerce order status.
@@ -104,9 +104,54 @@ function register_odoo_update_stock_endpoint() {
 			'permission_callback' => 'odoo_update_stock_permission_check',
 		)
 	);
+
+	register_rest_route(
+		'odoo/v1',
+		'/update-order-meta',
+		array(
+			'methods'             => 'POST',
+			'callback'            => 'update_order_meta_handler',
+			'args'                => array(
+				'order_id'          => array(
+					'required'          => true,
+					'validate_callback' => function ( $param ) {
+						return is_numeric( $param ) && $param > 0;
+					},
+				),
+				'odoo_order_id'     => array(
+					'required'          => true,
+					'validate_callback' => function ( $param ) {
+						return is_numeric( $param ) && $param > 0;
+					},
+				),
+				'odoo_order_number' => array(
+					'required'          => true,
+					'validate_callback' => function ( $param ) {
+						return ! empty( $param );
+					},
+				),
+			),
+			'permission_callback' => 'odoo_update_stock_permission_check',
+		)
+	);
 }
 add_action( 'rest_api_init', 'register_odoo_update_stock_endpoint' );
 
+function update_order_meta_handler( $request ) {
+	$order_id          = $request['order_id'];
+	$odoo_order_id     = $request['odoo_order_id'];
+	$odoo_order_number = $request['odoo_order_number'];
+
+	$order = wc_get_order( $order_id );
+	if ( $order ) {
+		update_post_meta( $order_id, 'odoo_order', $odoo_order_id );
+		update_post_meta( $order_id, 'odoo_order_number', $odoo_order_number );
+		update_post_meta( $order_id, 'oodo-status', 'success' );
+		$order->add_order_note( "تم إرسال الطلب بنجاح إلى أودو برقم أودو ID: {$odoo_order_id}.", false );
+		return new WP_REST_Response( array( 'message' => 'Order meta updated successfully' ), 200 );
+	}
+	return new WP_REST_Response( array( 'error' => 'Invalid order ID' ), 400 );
+}
 /**
  * Handles the request to set WooCommerce order status.
  *
@@ -136,8 +181,8 @@ function set_order_status_handler( $request ) {
 
 		return new WP_REST_Response(
 			array(
-				'success' => true,
-				'message' => 'Order status updated successfully.',
+				'success'  => true,
+				'message'  => 'Order status updated successfully.',
 				'order_id' => $order_id,
 				'status'   => $status,
 			),
