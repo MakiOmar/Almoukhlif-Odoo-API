@@ -4,13 +4,22 @@
  */
 function odoo_orders_with_meta_admin_page() {
 	add_menu_page(
-		esc_html__( 'Odoo orders', 'text-domain' ),
+		esc_html__( 'Odoo Orders', 'text-domain' ),
 		esc_html__( 'Odoo Orders', 'text-domain' ),
 		'manage_woocommerce',
-		'odoo-orders-with-meta',
-		'display_odoo_orders_with_meta_page',
+		'odoo-orders',
+		'',
 		'dashicons-clipboard',
-		59
+		58
+	);
+
+	add_submenu_page(
+		'odoo-orders',
+		esc_html__( 'Orders with Odoo Meta', 'text-domain' ),
+		esc_html__( 'Orders with Meta', 'text-domain' ),
+		'manage_woocommerce',
+		'odoo-orders-with-meta',
+		'display_odoo_orders_with_meta_page'
 	);
 }
 add_action( 'admin_menu', 'odoo_orders_with_meta_admin_page' );

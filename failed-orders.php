@@ -8,16 +8,16 @@ defined( 'ABSPATH' ) || die;
  * Add an admin menu page to display orders with failed Odoo status.
  */
 function odoo_failed_orders_admin_page() {
-	add_menu_page(
+	add_submenu_page(
+		'odoo-orders',
 		esc_html__( 'Failed Odoo Orders', 'text-domain' ),
-		esc_html__( 'Odoo Failed Orders', 'text-domain' ),
+		esc_html__( 'Failed Orders', 'text-domain' ),
 		'manage_woocommerce',
 		'odoo-failed-orders',
-		'display_odoo_failed_orders_page',
-		'dashicons-warning',
-		58
+		'display_odoo_failed_orders_page'
 	);
 }
+
 add_action( 'admin_menu', 'odoo_failed_orders_admin_page' );
 
 /**

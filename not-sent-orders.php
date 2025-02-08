@@ -8,14 +8,14 @@ defined( 'ABSPATH' ) || die;
  * Add an admin menu page to display orders without oodo-status.
  */
 function odoo_missing_status_orders_admin_page() {
-	add_menu_page(
+
+	add_submenu_page(
+		'odoo-orders',
 		esc_html__( 'Orders Without Odoo Status', 'text-domain' ),
-		esc_html__( 'Odoo Missing Status Orders', 'text-domain' ),
+		esc_html__( 'Missing Status Orders', 'text-domain' ),
 		'manage_woocommerce',
 		'odoo-missing-status-orders',
-		'display_odoo_missing_status_orders_page',
-		'dashicons-warning',
-		58
+		'display_odoo_missing_status_orders_page'
 	);
 }
 add_action( 'admin_menu', 'odoo_missing_status_orders_admin_page' );
