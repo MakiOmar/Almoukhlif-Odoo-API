@@ -711,15 +711,20 @@ add_action(
 );
 
 
-add_action( 'wpo_wcpdf_before_order_data', function($type, $order){
-	$odoo = get_post_meta( $order->get_id(), 'odoo_order_number', true );
-	if ( !$odoo && $odoo === '' ) {
-		return;
-	}
-	?>
+add_action(
+	'wpo_wcpdf_before_order_data',
+	function ( $type, $order ) {
+		$odoo = get_post_meta( $order->get_id(), 'odoo_order_number', true );
+		if ( ! $odoo && $odoo === '' ) {
+			return;
+		}
+		?>
 	<tr class="odoo-number">
 		<th><?php _e( 'رقم أودو:', 'woocommerce-pdf-invoices-packing-slips' ); ?></th>
 		<td><?php echo $odoo; ?></td>
 	</tr>
-	<?php
-}, 10, 2 );
+		<?php
+	},
+	10,
+	2
+);
