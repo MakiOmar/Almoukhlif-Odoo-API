@@ -15,8 +15,8 @@ function odoo_orders_with_meta_admin_page() {
 
 	add_submenu_page(
 		'odoo-orders',
-		esc_html__( 'Orders with Odoo Meta', 'text-domain' ),
-		esc_html__( 'Orders with Meta', 'text-domain' ),
+		esc_html__( 'Sent Orders', 'text-domain' ),
+		esc_html__( 'Sent Orders', 'text-domain' ),
 		'manage_woocommerce',
 		'odoo-orders-with-meta',
 		'display_odoo_orders_with_meta_page'
