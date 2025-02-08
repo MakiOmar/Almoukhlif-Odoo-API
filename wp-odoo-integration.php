@@ -18,6 +18,7 @@ define( 'ODOO_BASE', 'https://almokhlif-oud-live-staging-17381935.dev.odoo.com/'
 // Include REST API integration for Odoo.
 require_once plugin_dir_path( __FILE__ ) . 'includes/rest-api.php';
 require_once plugin_dir_path( __FILE__ ) . 'failed-orders.php';
+require_once plugin_dir_path( __FILE__ ) . 'not-sent-orders.php';
 require_once plugin_dir_path( __FILE__ ) . 'odoo.php';
 
 require plugin_dir_path( __FILE__ ) . 'plugin-update-checker/plugin-update-checker.php';
@@ -77,47 +78,16 @@ function get_odoo_auth_token() {
 	}
 	return $token;
 }
+function check_odoo_stock( $sku, $quantity, $product_id ) {
+	$message = 'لا يمكن استرجاع معلومات المخزون. يرجى المحاولة لاحقًا.';
 
-/**
- * Check stock from Odoo before allowing a product to be added to the WooCommerce cart.
- *
- * This function fetches the product SKU and calls an Odoo API endpoint to verify stock levels.
- * If the Odoo stock is less than the WooCommerce stock, the product is prevented from being added to the cart.
- *
- * @param bool    $passed     Whether the add-to-cart action should proceed.
- * @param int     $product_id The ID of the product being added to the cart.
- * @param int     $quantity   The quantity of the product.
- * @param integer $variation_id      Variation ID being added to the cart.
- * @param array   $variation         Variation data.
- * @return bool Whether the add-to-cart action should proceed.
- */
-function odoo_check_stock_before_add_to_cart( $passed, $product_id, $quantity, $variation_id = 0, $variation = null ) {
-	// Check if WooCommerce is active.
-	if ( ! class_exists( 'WooCommerce' ) ) {
-		return $passed;
-	}
-	// Get the product SKU.
-	$product = wc_get_product( $product_id );
-	$sku     = $product->get_sku();
-	// Check if the product is a variation.
-	if ( $variation_id ) {
-		// Get the parent (main) product object.
-		$variation  = wc_get_product( $variation_id );
-		$multiplier = $variation->get_meta( '_stock_multiplier' );
-	} else {
-		// Use the simple product's SKU.
-		$multiplier = 1;
-	}
-	$quantity = $quantity * $multiplier;
-	$message  = 'لا يمكن استرجاع معلومات المخزون. يرجى المحاولة لاحقًا.';
 	// Fetch the authentication token.
 	$token = get_odoo_auth_token();
 	if ( ! $token ) {
 		if ( function_exists( 'teamlog' ) ) {
 			teamlog( $message );
 		}
-		wc_add_notice( $message, 'error' );
-		return false;
+		return new WP_Error( 'token_error', $message );
 	}
 
 	// Odoo API stock endpoint.
@@ -145,16 +115,16 @@ function odoo_check_stock_before_add_to_cart( $passed, $product_id, $quantity, $
 	);
 
 	if ( is_wp_error( $stock_response ) ) {
-		wc_add_notice( $message, 'error' );
-		return false;
+		return new WP_Error( 'stock_api_error', $message );
 	}
 
 	$stock_body_response = wp_remote_retrieve_body( $stock_response );
 	$stock_data          = json_decode( $stock_body_response );
+
 	if ( ! isset( $stock_data->result->Data ) || ! is_array( $stock_data->result->Data ) ) {
-		wc_add_notice( $message, 'error' );
-		return false;
+		return new WP_Error( 'stock_data_error', $message );
 	}
+
 	// Calculate total positive stock quantity.
 	$total_stock = 0;
 	foreach ( $stock_data->result->Data as $stock_item ) {
@@ -163,9 +133,60 @@ function odoo_check_stock_before_add_to_cart( $passed, $product_id, $quantity, $
 			$total_stock += $q;
 		}
 	}
-	teamlog( print_r( array( $stock_item ), true ) );
-	// Compare Odoo stock with WooCommerce stock.
-	if ( absint( $total_stock ) < absint( $quantity ) ) {
+
+	// Check if the product has a stock multiplier.
+	$product    = wc_get_product( $product_id );
+	$multiplier = $product->is_type( 'variation' )
+		? (float) $product->get_meta( '_stock_multiplier', true )
+		: 1;
+
+	$adjusted_quantity = $quantity * $multiplier;
+	teamlog( print_r( array( $total_stock, $adjusted_quantity ), true ) );
+	// Return stock availability.
+	return $total_stock >= $adjusted_quantity;
+}
+
+
+/**
+ * Check stock from Odoo before allowing a product to be added to the WooCommerce cart.
+ *
+ * This function fetches the product SKU and calls an Odoo API endpoint to verify stock levels.
+ * If the Odoo stock is less than the WooCommerce stock, the product is prevented from being added to the cart.
+ *
+ * @param bool    $passed     Whether the add-to-cart action should proceed.
+ * @param int     $product_id The ID of the product being added to the cart.
+ * @param int     $quantity   The quantity of the product.
+ * @param integer $variation_id      Variation ID being added to the cart.
+ * @param array   $variation         Variation data.
+ * @return bool Whether the add-to-cart action should proceed.
+ */
+function odoo_check_stock_before_add_to_cart( $passed, $product_id, $quantity, $variation_id = 0, $variation = null ) {
+	// Check if WooCommerce is active.
+	if ( ! class_exists( 'WooCommerce' ) ) {
+		return $passed;
+	}
+
+	// Get the product and its SKU.
+	$product = wc_get_product( $product_id );
+	if ( ! $product ) {
+		wc_add_notice( 'Invalid product.', 'error' );
+		return false;
+	}
+
+	$sku = $product->get_sku();
+
+	// Determine if this is a variation or simple product.
+	$check_id = $variation_id ? $variation_id : $product_id;
+
+	// Use the helper function to check stock with the multiplier.
+	$stock_check = check_odoo_stock( $sku, $quantity, $check_id );
+
+	if ( is_wp_error( $stock_check ) ) {
+		wc_add_notice( $stock_check->get_error_message(), 'error' );
+		return false;
+	}
+
+	if ( ! $stock_check ) {
 		$message = 'مخزون المنتج محدود. يرجى التواصل مع الدعم للحصول على مزيد من المعلومات.';
 		wc_add_notice( $message, 'error' );
 		return false; // Prevent adding to cart.
@@ -173,6 +194,8 @@ function odoo_check_stock_before_add_to_cart( $passed, $product_id, $quantity, $
 
 	return $passed; // Allow adding to cart if all checks pass.
 }
+add_filter( 'woocommerce_add_to_cart_validation', 'odoo_check_stock_before_add_to_cart', 10, 5 );
+
 
 /**
  * Update stock in WooCommerce based on Odoo stock data for a given SKU or product object.
@@ -253,12 +276,10 @@ function update_odoo_stock( $sku, $product = null ) {
 
 
 function send_orders_batch_to_odoo( $order_ids ) {
-	// تحقق إذا لم يتم تمرير أي أرقام طلبات.
 	if ( empty( $order_ids ) || ! is_array( $order_ids ) ) {
 		return;
 	}
 
-	// الحصول على رمز التوثيق من Odoo.
 	$token = get_odoo_auth_token();
 	if ( ! $token ) {
 		if ( function_exists( 'teamlog' ) ) {
@@ -270,51 +291,62 @@ function send_orders_batch_to_odoo( $order_ids ) {
 			$order = wc_get_order( $order_id );
 			update_post_meta( $order_id, 'oodo-status', 'failed' );
 			$error_message = 'فشل إرسال الطلب إلى أودو: رد غير متوقع.';
-			$order->add_order_note( $error_message, false ); // تسجيل الخطأ كملاحظة للطلب.
+			$order->add_order_note( $error_message, false );
 		}
 		return false;
 	}
 
-	// إعداد مصفوفة الطلبات لإرسالها إلى Odoo.
 	$orders_data = array();
-
 	$orders_temp = array();
 
 	foreach ( $order_ids as $order_id ) {
-		// التحقق مما إذا كان الطلب قد تم إرساله بالفعل إلى Odoo.
 		$odoo_order = get_post_meta( $order_id, 'odoo_order', true );
 		if ( ! empty( $odoo_order ) && is_numeric( $odoo_order ) ) {
 			continue;
 		}
 
-		// جلب تفاصيل الطلب.
 		$order = wc_get_order( $order_id );
 		if ( ! $order ) {
 			continue;
 		}
+
+		// **Validate Billing Details**
+		$billing_fields = array(
+			'first_name' => $order->get_billing_first_name(),
+			'last_name'  => $order->get_billing_last_name(),
+			'address_1'  => $order->get_billing_address_1(),
+			'city'       => $order->get_billing_city(),
+			'state'      => $order->get_billing_state(),
+			'postcode'   => $order->get_billing_postcode(),
+			'country'    => $order->get_billing_country(),
+			'email'      => $order->get_billing_email(),
+			'phone'      => $order->get_billing_phone(),
+		);
+
+		$missing_fields = array();
+		foreach ( $billing_fields as $field => $value ) {
+			if ( empty( $value ) ) {
+				$missing_fields[] = ucfirst( str_replace( '_', ' ', $field ) );
+			}
+		}
+
+		if ( ! empty( $missing_fields ) ) {
+			$missing_fields_text = implode( ', ', $missing_fields );
+			update_post_meta( $order->get_id(), 'oodo-status', 'failed' );
+			$order->add_order_note( "لم يتم إرسال الطلب إلى أودو بسبب نقص في بيانات الفوترة: $missing_fields_text.", false );
+			continue; // Skip this order
+		}
+
 		$orders_temp[] = $order;
 		$order_data    = array(
 			'woo_commerce_id' => $order->get_id(),
 			'manual_confirm'  => false,
 			'note'            => $order->get_customer_note(),
 			'state'           => 'draft',
-			'billing'         => array(
-				'first_name' => $order->get_billing_first_name(),
-				'last_name'  => $order->get_billing_last_name(),
-				'address_1'  => $order->get_billing_address_1(),
-				'address_2'  => $order->get_billing_address_2(),
-				'city'       => $order->get_billing_city(),
-				'state'      => $order->get_billing_state(),
-				'postcode'   => $order->get_billing_postcode(),
-				'country'    => $order->get_billing_country(),
-				'email'      => $order->get_billing_email(),
-				'phone'      => $order->get_billing_phone(),
-			),
+			'billing'         => $billing_fields,
 			'order_line'      => array(),
-			// 'location_id'     => '',
 		);
 
-		// إضافة عناصر الطلب (المنتجات) إلى بيانات الطلب.
 		foreach ( $order->get_items( 'line_item' ) as $item_id => $item ) {
 			$product    = $item->get_product();
 			$product_id = $product->get_id();
@@ -336,7 +368,6 @@ function send_orders_batch_to_odoo( $order_ids ) {
 			);
 		}
 
-		// إضافة تكلفة الشحن.
 		$order_data['order_line'][] = array(
 			'default_code'    => '1000000',
 			'name'            => 'شحن',
@@ -344,7 +375,6 @@ function send_orders_batch_to_odoo( $order_ids ) {
 			'price_unit'      => $order->get_shipping_total(),
 		);
 
-		// إضافة الرسوم الأخرى.
 		foreach ( $order->get_items( 'fee' ) as $fee_id => $fee ) {
 			$order_data['fees'][] = array(
 				'name'  => $fee->get_name(),
@@ -355,15 +385,12 @@ function send_orders_batch_to_odoo( $order_ids ) {
 		$orders_data['orders'][] = $order_data;
 	}
 
-	// إذا لم يكن هناك أي بيانات لإرسالها.
 	if ( empty( $orders_data ) ) {
 		return;
 	}
 
-	// رابط API الخاص بـ أودو.
 	$odoo_api_url = ODOO_BASE . 'api/sale.order/add_update_order';
 
-	// إرسال البيانات إلى أودو باستخدام wp_remote_post.
 	$response = wp_remote_post(
 		$odoo_api_url,
 		array(
@@ -377,9 +404,9 @@ function send_orders_batch_to_odoo( $order_ids ) {
 		)
 	);
 
-	// معالجة الرد من أودو.
 	$response_body = wp_remote_retrieve_body( $response );
 	$response_data = json_decode( $response_body );
+
 	if ( is_wp_error( $response ) || empty( $response_data ) || ! isset( $response_data->result->Code ) || 200 !== $response_data->result->Code ) {
 		if ( function_exists( 'teamlog' ) ) {
 			teamlog( 'فشل إرسال الطلبات إلى Odoo: رد غير متوقع.' );
@@ -389,15 +416,36 @@ function send_orders_batch_to_odoo( $order_ids ) {
 		foreach ( $orders_temp as $order ) {
 			update_post_meta( $order->get_id(), 'oodo-status', 'failed' );
 			$error_message = 'فشل إرسال الطلب إلى أودو: رد غير متوقع.';
-			$order->add_order_note( $error_message, false ); // تسجيل الخطأ كملاحظة للطلب.
+			$order->add_order_note( $error_message, false );
 		}
 		return;
+	} elseif ( ! empty( $response_data ) && isset( $response_data->result->Code ) && 200 === $response_data->result->Code ) {
+
+		// Loop through the response Data array
+		if ( isset( $response_data->result->Data ) && is_array( $response_data->result->Data ) ) {
+			foreach ( $response_data->result->Data as $data ) {
+				if ( isset( $data->ID ) && $data->ID === false && isset( $data->StatusDescription ) && $data->StatusDescription === 'Failed' && isset( $data->woo_commerce_id ) ) {
+
+					// Update post meta with failed status
+					update_post_meta( $data->woo_commerce_id, 'oodo-status', 'failed' );
+
+					// Add order note with Arabic message if exists
+					if ( isset( $data->ArabicMessage ) ) {
+						$order = wc_get_order( $data->woo_commerce_id );
+						if ( $order ) {
+							$order->add_order_note( $data->ArabicMessage, false );
+						}
+					}
+				}
+			}
+		}
 	}
-	// تحديث الطلبات الناجحة.
+
 	foreach ( $response_data->result->Data as $odoo_order ) {
 		if ( $odoo_order->woo_commerce_id ) {
 			$order_id = $odoo_order->woo_commerce_id;
 			update_post_meta( $order_id, 'odoo_order', $odoo_order->ID );
+			update_post_meta( $order_id, 'odoo_order_number', $odoo_order->Number );
 			update_post_meta( $order_id, 'oodo-status', 'success' );
 			$order = wc_get_order( $order_id );
 			if ( $order ) {
@@ -413,10 +461,16 @@ function send_orders_batch_to_odoo( $order_ids ) {
 				teamlog( 'Order not found' );
 			}
 		} else {
-			teamlog( 'No woo_commerce_id' );
+			teamlog(
+				array(
+					'error'    => 'No woo_commerce_id',
+					'response' => $odoo_order,
+				)
+			);
 		}
 	}
 }
+
 
 /**
  * Display Odoo Order ID under the billing details in the admin order page.
@@ -424,16 +478,24 @@ function send_orders_batch_to_odoo( $order_ids ) {
  * @param WC_Order $order The order object.
  */
 function display_odoo_order_id_in_admin( $order ) {
-	$odoo_order_id = get_post_meta( $order->get_id(), 'odoo_order', true );
+	$odoo_order_id     = get_post_meta( $order->get_id(), 'odoo_order', true );
+	$odoo_order_number = get_post_meta( $order->get_id(), 'odoo_order_number', true );
 
 	if ( $odoo_order_id ) {
 		echo '<p><strong>' . __( 'Odoo Order ID:', 'text-domain' ) . '</strong> ' . esc_html( $odoo_order_id ) . '</p>';
+		echo '<p><strong>' . __( 'Odoo Order Number:', 'text-domain' ) . '</strong> ' . esc_html( $odoo_order_number ) . '</p>';
 	}
 }
 add_action( 'woocommerce_admin_order_data_after_billing_address', 'display_odoo_order_id_in_admin', 10, 1 );
 
 add_action(
 	'woocommerce_thankyou',
+	function ( $order_id ) {
+		send_orders_batch_to_odoo( array( $order_id ) );
+	}
+);
+add_action(
+	'woocommerce_checkout_phone_order_processed',
 	function ( $order_id ) {
 		send_orders_batch_to_odoo( array( $order_id ) );
 	}
@@ -583,7 +645,7 @@ add_action(
 		if ( 'cancelled' === $new_status || 'was-canceled' === $new_status || 'wc-cancelled' === $new_status ) {
 			$odoo_order_id = get_post_meta( $order_id, 'odoo_order', true );
 			if ( $odoo_order_id ) {
-				cancel_odoo_order( $odoo_order_id );
+				cancel_odoo_order( $odoo_order_id, $order_id );
 			}
 		}
 
@@ -597,3 +659,67 @@ add_action(
 
 
 add_filter( 'woocommerce_add_to_cart_validation', 'odoo_check_stock_before_add_to_cart', 10, 5 );
+add_action(
+	'wpo_before_load_items',
+	function ( $request ) {
+		// Ensure the request contains items.
+		if ( ! empty( $request['items'] ) ) {
+			foreach ( $request['items'] as $item ) {
+				$product_id = $item['id'];
+				$quantity   = isset( $item['quantity'] ) ? (int) $item['quantity'] : 1;
+
+				// Get the product object.
+				$product = wc_get_product( $product_id );
+				if ( ! $product ) {
+					echo json_encode( array( 'error' => 'Invalid product ID.' ) );
+					die();
+				}
+				// Determine if this is a variation or simple product.
+				$sku = $product->get_sku();
+
+				if ( $product->is_type( 'variation' ) ) {
+					// For variations, use the variation itself.
+					$variation_id = $product_id;
+				} else {
+					// For simple products, use the product ID.
+					$variation_id = $product_id;
+				}
+
+				// Use the helper function to check stock with the multiplier.
+				$stock_check = check_odoo_stock( $sku, $quantity, $variation_id );
+
+				if ( is_wp_error( $stock_check ) ) {
+					echo json_encode(
+						array(
+							'error' => $stock_check->get_error_message(),
+						)
+					);
+					die();
+				}
+
+				if ( ! $stock_check ) {
+					echo json_encode(
+						array(
+							'error' => 'مخزون المنتج غير متوفر بالكمية المطلوبة. يرجى تعديل الكمية أو اختيار منتج آخر.',
+						)
+					);
+					die();
+				}
+			}
+		}
+	}
+);
+
+
+add_action( 'wpo_wcpdf_before_order_data', function($type, $order){
+	$odoo = get_post_meta( $order->get_id(), 'odoo_order_number', true );
+	if ( !$odoo && $odoo === '' ) {
+		return;
+	}
+	?>
+	<tr class="odoo-number">
+		<th><?php _e( 'رقم أودو:', 'woocommerce-pdf-invoices-packing-slips' ); ?></th>
+		<td><?php echo $odoo; ?></td>
+	</tr>
+	<?php
+}, 10, 2 );
