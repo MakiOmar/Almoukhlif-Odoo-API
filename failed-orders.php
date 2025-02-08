@@ -31,26 +31,47 @@ function process_odoo_bulk_send_form() {
 }
 
 /**
- * Display the admin page content for failed Odoo orders.
+ * Display the admin page content for failed Odoo orders with pagination.
  */
 function display_odoo_failed_orders_page() {
 	// Process form submission.
 	process_odoo_bulk_send_form();
 
+	// Pagination setup
+	$per_page = 10;
+	$paged    = isset( $_GET['paged'] ) ? max( 1, intval( $_GET['paged'] ) ) : 1;
+	$offset   = ( $paged - 1 ) * $per_page;
+
 	// Fetch orders with odoo-status set to failed.
 	$args = array(
-		'post_type'   => 'shop_order',
-		'post_status' => 'any',
-		'meta_query'  => array(
+		'post_type'      => 'shop_order',
+		'post_status'    => 'any',
+		'meta_query'     => array(
 			array(
 				'key'     => 'oodo-status',
 				'value'   => 'failed',
 				'compare' => '=',
 			),
 		),
+		'posts_per_page' => $per_page,
+		'paged'          => $paged,
+		'offset'         => $offset,
 	);
 
-	$orders = get_posts( $args );
+	$orders       = get_posts( $args );
+	$total_orders = count(
+		get_posts(
+			array_merge(
+				$args,
+				array(
+					'posts_per_page' => -1,
+					'paged'          => 1,
+					'offset'         => 0,
+				)
+			)
+		)
+	);
+	$total_pages  = ceil( $total_orders / $per_page );
 	?>
 	<div class="wrap">
 		<h1><?php esc_html_e( 'Failed Odoo Orders', 'text-domain' ); ?></h1>
@@ -101,6 +122,19 @@ function display_odoo_failed_orders_page() {
 				</p>
 			<?php endif; ?>
 		</form>
+
+		<?php
+		echo paginate_links(
+			array(
+				'base'      => add_query_arg( 'paged', '%#%' ),
+				'format'    => '',
+				'current'   => $paged,
+				'total'     => $total_pages,
+				'prev_text' => __( '« Previous', 'text-domain' ),
+				'next_text' => __( 'Next »', 'text-domain' ),
+			)
+		);
+		?>
 	</div>
 	<script>
 		document.getElementById('select_all').addEventListener('click', function() {
@@ -110,7 +144,6 @@ function display_odoo_failed_orders_page() {
 	</script>
 	<?php
 }
-
 
 /**
  * Add a link with a count of failed orders to the admin bar.
