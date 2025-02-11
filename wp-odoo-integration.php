@@ -326,7 +326,7 @@ function send_orders_batch_to_odoo( $order_ids ) {
 		$missing_fields = array();
 		foreach ( $billing_fields as $field => $value ) {
 			if ( empty( $value ) ) {
-				$missing_fields[] = ucfirst( str_replace( '_', ' ', $field ) );
+				// $missing_fields[] = ucfirst( str_replace( '_', ' ', $field ) );
 			}
 		}
 
@@ -336,7 +336,7 @@ function send_orders_batch_to_odoo( $order_ids ) {
 			$order->add_order_note( "لم يتم إرسال الطلب إلى أودو بسبب نقص في بيانات الفوترة: $missing_fields_text.", false );
 			continue; // Skip this order
 		}
-
+		$order_status  = $order->get_status();
 		$orders_temp[] = $order;
 		$order_data    = array(
 			'woo_commerce_id' => $order->get_id(),
@@ -345,6 +345,8 @@ function send_orders_batch_to_odoo( $order_ids ) {
 			'state'           => 'draft',
 			'billing'         => $billing_fields,
 			'order_line'      => array(),
+			'payment_method'  => $order->get_payment_method_title(),
+			'wc_order_status' => wc_get_order_statuses()[ "wc-$order_status" ],
 		);
 
 		foreach ( $order->get_items( 'line_item' ) as $item_id => $item ) {
@@ -499,6 +501,14 @@ add_action(
 	function ( $order_id ) {
 		send_orders_batch_to_odoo( array( $order_id ) );
 	}
+);
+
+add_action(
+	'woocommerce_process_shop_order_meta',
+	function ( $order_id ) {
+		send_orders_batch_to_odoo( array( $order_id ) );
+	},
+	99
 );
 
 /**
