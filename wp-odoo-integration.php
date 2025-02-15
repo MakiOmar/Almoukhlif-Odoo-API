@@ -141,7 +141,6 @@ function check_odoo_stock( $sku, $quantity, $product_id ) {
 		: 1;
 
 	$adjusted_quantity = $quantity * $multiplier;
-	teamlog( print_r( array( $total_stock, $adjusted_quantity ), true ) );
 	// Return stock availability.
 	return $total_stock >= $adjusted_quantity;
 }
@@ -427,10 +426,9 @@ function send_orders_batch_to_odoo( $order_ids ) {
 		if ( isset( $response_data->result->Data ) && is_array( $response_data->result->Data ) ) {
 			foreach ( $response_data->result->Data as $data ) {
 				if ( isset( $data->ID ) && $data->ID === false && isset( $data->StatusDescription ) && $data->StatusDescription === 'Failed' && isset( $data->woo_commerce_id ) ) {
-
-					// Update post meta with failed status
-					update_post_meta( $data->woo_commerce_id, 'oodo-status', 'failed' );
-
+					if ( strpos( $data->EnglishMessage, 'already exists' ) === false ) {
+						update_post_meta( $data->woo_commerce_id, 'oodo-status', 'failed' );
+					}
 					// Add order note with Arabic message if exists
 					if ( isset( $data->ArabicMessage ) ) {
 						$order = wc_get_order( $data->woo_commerce_id );
@@ -438,6 +436,7 @@ function send_orders_batch_to_odoo( $order_ids ) {
 							$order->add_order_note( $data->ArabicMessage, false );
 						}
 					}
+					return;
 				}
 			}
 		}
@@ -490,26 +489,6 @@ function display_odoo_order_id_in_admin( $order ) {
 }
 add_action( 'woocommerce_admin_order_data_after_billing_address', 'display_odoo_order_id_in_admin', 10, 1 );
 
-add_action(
-	'woocommerce_thankyou',
-	function ( $order_id ) {
-		send_orders_batch_to_odoo( array( $order_id ) );
-	}
-);
-add_action(
-	'woocommerce_checkout_phone_order_processed',
-	function ( $order_id ) {
-		send_orders_batch_to_odoo( array( $order_id ) );
-	}
-);
-
-add_action(
-	'woocommerce_process_shop_order_meta',
-	function ( $order_id ) {
-		send_orders_batch_to_odoo( array( $order_id ) );
-	},
-	99
-);
 
 /**
  * Cancel an order in Odoo.
@@ -737,4 +716,295 @@ add_action(
 	},
 	10,
 	2
+);
+
+
+add_action(
+	'woocommerce_thankyou',
+	function ( $order_id ) {
+		send_orders_batch_to_odoo( array( $order_id ) );
+	}
+);
+add_action(
+	'woocommerce_checkout_phone_order_processed',
+	function ( $order_id ) {
+		send_orders_batch_to_odoo( array( $order_id ) );
+	}
+);
+
+add_action(
+	'woocommerce_process_shop_order_meta',
+	function ( $order_id ) {
+		send_orders_batch_to_odoo( array( $order_id ) );
+	},
+	99
+);
+
+add_action(
+	'woocommerce_admin_order_data_after_order_details',
+	function ( $order ) {
+		$order_id = $order->get_id();
+		$nonce    = wp_create_nonce( 'sync_order_to_odoo_' . $order_id );
+
+		echo '<button id="sync-to-odoo" class="button button-primary" data-order-id="' . esc_attr( $order_id ) . '" data-nonce="' . esc_attr( $nonce ) . '">
+        <span class="sync-text">Sync to Odoo</span>
+        <span class="sync-loading" style="display:none;">Loading...</span>
+    </button>';
+	}
+);
+
+add_action(
+	'wp_ajax_sync_order_to_odoo',
+	function () {
+		// Validate order ID.
+		if ( empty( $_POST['order_id'] ) || empty( $_POST['nonce'] ) ) {
+			wp_send_json_error( array( 'message' => 'Invalid request' ) );
+		}
+
+		$order_id = intval( $_POST['order_id'] );
+		$nonce    = sanitize_text_field( $_POST['nonce'] );
+
+		// Verify nonce for security.
+		if ( ! wp_verify_nonce( $nonce, 'sync_order_to_odoo_' . $order_id ) ) {
+			wp_send_json_error( array( 'message' => 'Security check failed' ) );
+		}
+
+		// Call the function to sync with Odoo.
+		send_orders_batch_to_odoo_v2( array( $order_id ) );
+
+		wp_send_json_success( array( 'message' => 'Order synced successfully' ) );
+	}
+);
+function send_orders_batch_to_odoo_v2( $order_ids ) {
+	if ( empty( $order_ids ) || ! is_array( $order_ids ) ) {
+		return wp_send_json_error( array( 'message' => 'No order IDs provided.' ) );
+	}
+
+	$token = get_odoo_auth_token();
+	if ( ! $token ) {
+		$error_message = 'فشل إرسال الطلبات إلى Odoo: رمز التوثيق غير موجود.';
+		foreach ( $order_ids as $order_id ) {
+			$order = wc_get_order( $order_id );
+			update_post_meta( $order_id, 'oodo-status', 'failed' );
+			$order->add_order_note( $error_message, false );
+		}
+		return wp_send_json_error( $error_message );
+	}
+
+	$orders_data = array();
+	$orders_temp = array();
+
+	foreach ( $order_ids as $order_id ) {
+		$odoo_order = get_post_meta( $order_id, 'odoo_order', true );
+		if ( ! empty( $odoo_order ) && is_numeric( $odoo_order ) ) {
+			continue;
+		}
+
+		$order = wc_get_order( $order_id );
+		if ( ! $order ) {
+			continue;
+		}
+
+		// **Validate Billing Details**
+		$billing_fields = array(
+			'first_name' => $order->get_billing_first_name(),
+			'last_name'  => $order->get_billing_last_name(),
+			'address_1'  => $order->get_billing_address_1(),
+			'city'       => $order->get_billing_city(),
+			'state'      => $order->get_billing_state(),
+			'postcode'   => $order->get_billing_postcode(),
+			'country'    => $order->get_billing_country(),
+			'email'      => $order->get_billing_email(),
+			'phone'      => $order->get_billing_phone(),
+		);
+
+		$missing_fields = array();
+		foreach ( $billing_fields as $field => $value ) {
+			if ( empty( $value ) ) {
+				// $missing_fields[] = ucfirst( str_replace( '_', ' ', $field ) );
+			}
+		}
+
+		if ( ! empty( $missing_fields ) ) {
+			$missing_fields_text = implode( ', ', $missing_fields );
+			update_post_meta( $order->get_id(), 'oodo-status', 'failed' );
+			$order->add_order_note( "لم يتم إرسال الطلب إلى أودو بسبب نقص في بيانات الفوترة: $missing_fields_text.", false );
+			continue; // Skip this order
+		}
+		$order_status  = $order->get_status();
+		$orders_temp[] = $order;
+		$order_data    = array(
+			'woo_commerce_id' => $order->get_id(),
+			'manual_confirm'  => false,
+			'note'            => $order->get_customer_note(),
+			'state'           => 'draft',
+			'billing'         => $billing_fields,
+			'order_line'      => array(),
+			'payment_method'  => $order->get_payment_method_title(),
+			'wc_order_status' => wc_get_order_statuses()[ "wc-$order_status" ],
+		);
+
+		foreach ( $order->get_items( 'line_item' ) as $item_id => $item ) {
+			$product    = $item->get_product();
+			$product_id = $product->get_id();
+			$multiplier = 1;
+
+			if ( $product->is_type( 'variation' ) ) {
+				$multiplier = (float) get_post_meta( $product_id, '_stock_multiplier', true );
+				$multiplier = $multiplier > 0 ? $multiplier : 1;
+			}
+
+			$quantity   = $item->get_quantity() * $multiplier;
+			$unit_price = $item->get_total() / $quantity;
+
+			$order_data['order_line'][] = array(
+				'default_code'    => $product->get_sku(),
+				'name'            => $item->get_name(),
+				'product_uom_qty' => $quantity,
+				'price_unit'      => $unit_price + ( $unit_price * 0.15 ),
+			);
+		}
+
+		$order_data['order_line'][] = array(
+			'default_code'    => '1000000',
+			'name'            => 'شحن',
+			'product_uom_qty' => 1,
+			'price_unit'      => $order->get_shipping_total(),
+		);
+
+		foreach ( $order->get_items( 'fee' ) as $fee_id => $fee ) {
+			$order_data['fees'][] = array(
+				'name'  => $fee->get_name(),
+				'total' => $fee->get_amount(),
+			);
+		}
+
+		$orders_data['orders'][] = $order_data;
+	}
+
+	if ( empty( $orders_data ) ) {
+		return wp_send_json_error( array( 'message' => 'No valid orders to send.' ) );
+	}
+
+	$odoo_api_url = ODOO_BASE . 'api/sale.order/add_update_order';
+
+	$response = wp_remote_post(
+		$odoo_api_url,
+		array(
+			'method'  => 'POST',
+			'body'    => wp_json_encode( $orders_data ),
+			'headers' => array(
+				'Content-Type' => 'application/json',
+				'token'        => $token,
+			),
+			'timeout' => 30,
+		)
+	);
+
+	$response_body = wp_remote_retrieve_body( $response );
+	$response_data = json_decode( $response_body );
+	if ( is_wp_error( $response ) || empty( $response_data ) || ! isset( $response_data->result->Code ) || 200 !== $response_data->result->Code ) {
+		$error_message = 'فشل إرسال الطلبات إلى Odoo: رد غير متوقع.';
+		foreach ( $orders_temp as $order ) {
+			update_post_meta( $order->get_id(), 'oodo-status', 'failed' );
+			$order->add_order_note( $error_message, false );
+		}
+		return wp_send_json_error( $error_message );
+	} elseif ( ! empty( $response_data ) && isset( $response_data->result->Code ) && 200 === $response_data->result->Code ) {
+
+		// Loop through the response Data array
+		if ( isset( $response_data->result->Data ) && is_array( $response_data->result->Data ) ) {
+			foreach ( $response_data->result->Data as $data ) {
+				if ( isset( $data->ID ) && $data->ID === false && isset( $data->StatusDescription ) && $data->StatusDescription === 'Failed' && isset( $data->woo_commerce_id ) ) {
+					if ( strpos( $data->EnglishMessage, 'already exists' ) === false ) {
+						update_post_meta( $data->woo_commerce_id, 'oodo-status', 'failed' );
+					}
+					// Add order note with Arabic message if exists
+					if ( isset( $data->ArabicMessage ) ) {
+						$order = wc_get_order( $data->woo_commerce_id );
+						if ( $order ) {
+							$order->add_order_note( $data->ArabicMessage, false );
+						}
+					}
+					return wp_send_json_error( array( 'message' => $data->ArabicMessage ?? 'Order failed to send.' ) );
+				} else {
+					return wp_send_json_error( array( 'message' => $data->ArabicMessage ?? 'Order failed to send.' ) );
+				}
+			}
+		}
+	}
+
+	foreach ( $response_data->result->Data as $odoo_order ) {
+		if ( $odoo_order->woo_commerce_id ) {
+			$order_id = $odoo_order->woo_commerce_id;
+			update_post_meta( $order_id, 'odoo_order', $odoo_order->ID );
+			update_post_meta( $order_id, 'odoo_order_number', $odoo_order->Number );
+			update_post_meta( $order_id, 'oodo-status', 'success' );
+			$order = wc_get_order( $order_id );
+			if ( $order ) {
+				$order->add_order_note( "تم إرسال الطلب بنجاح إلى أودو برقم أودو ID: {$odoo_order->ID}.", false );
+				foreach ( $order->get_items( 'line_item' ) as $item ) {
+					$product = $item->get_product();
+					if ( $product ) {
+						$sku = $product->get_sku();
+						update_odoo_stock( $sku, $product );
+					}
+				}
+			}
+		}
+	}
+
+	return wp_send_json_success( array( 'message' => 'Orders sent to Odoo successfully.' ) );
+}
+
+add_action(
+	'admin_footer',
+	function () {
+		global $pagenow, $post;
+
+		if ( 'post.php' !== $pagenow || 'shop_order' !== get_post_type( $post ) ) {
+			return;
+		}
+		?>
+	<script>
+		jQuery(document).ready(function ($) {
+			$('#sync-to-odoo').on('click', function (e) {
+				e.preventDefault();
+
+				var button = $(this);
+				var orderId = button.data('order-id');
+				var nonce = button.data('nonce');
+
+				// Show loading state
+				button.prop('disabled', true);
+				button.find('.sync-text').hide();
+				button.find('.sync-loading').show();
+
+				$.ajax({
+					url: ajaxurl,
+					type: 'POST',
+					dataType: 'json',
+					data: {
+						action: 'sync_order_to_odoo',
+						order_id: orderId,
+						nonce: nonce
+					},
+					success: function (response) {
+						console.log( response );
+						alert(response.data.message);
+					},
+					error: function () {
+						alert('Error syncing order.');
+					},
+					complete: function () {
+						button.prop('disabled', false);
+						button.find('.sync-text').show();
+						button.find('.sync-loading').hide();
+					}
+				});
+			});
+		});
+	</script>
+		<?php
+	}
 );
