@@ -17,14 +17,14 @@ function display_odoo_missing_status_orders_page() {
 	// Fetch orders without oodo-status meta key created after February 1, 2025.
 	$args = array(
 		'post_type'      => 'shop_order',
-		'post_status'    => 'any',
+		'post_status'    => array('wc-processing', 'wc-on-hold', 'wc-custom-status'),
 		'orderby'        => 'date',
 		'order'          => 'DESC',
 		'posts_per_page' => $orders_per_page,
 		'paged'          => $paged,
 		'date_query'     => array(
 			array(
-				'after'     => '2025-02-01',
+				'after'     => '2025-02-17',
 				'inclusive' => true,
 			),
 		),
@@ -115,11 +115,11 @@ function add_missing_status_orders_admin_bar_item( $wp_admin_bar ) {
 	// Fetch the count of orders without Odoo status meta key created after February 1, 2025.
 	$args = array(
 		'post_type'      => 'shop_order',
-		'post_status'    => 'any',
+		'post_status'    => array('wc-processing', 'wc-on-hold', 'wc-custom-status'),
 		'posts_per_page' => -1,
 		'date_query'     => array(
 			array(
-				'after'     => '2025-02-01',
+				'after'     => '2025-02-17',
 				'inclusive' => true,
 			),
 		),
