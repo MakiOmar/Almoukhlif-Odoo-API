@@ -13,7 +13,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'ODOO_BASE', 'https://almokhlif-oud-live-staging-17381935.dev.odoo.com/' );
+define( 'ODOO_BASE', 'https://almokhlif-oud-live.odoo.com/' );
 
 // Include REST API integration for Odoo.
 require_once plugin_dir_path( __FILE__ ) . 'includes/rest-api.php';
@@ -47,8 +47,8 @@ function get_odoo_auth_token() {
 		$auth_body = wp_json_encode(
 			array(
 				'params' => array(
-					'db'       => 'almokhlif-oud-live-staging-17381935',
-					'login'    => 'test_api@gmail.com',
+					'db'       => 'kira9424646-almokhlif-oud-main-14920979',
+					'login'    => 'website_user@odoo.com',
 					'password' => '123',
 				),
 			)
@@ -97,7 +97,7 @@ function check_odoo_stock( $sku, $quantity, $product_id ) {
 	$stock_body = json_encode(
 		array(
 			'default_code' => $sku,
-			'location_id'  => 157,
+			'location_id'  => 144,
 		)
 	);
 
@@ -218,7 +218,7 @@ function update_odoo_stock( $sku, $product = null ) {
 	$request_body = wp_json_encode(
 		array(
 			'default_code' => $sku,
-			'location_id'  => 157,
+			'location_id'  => 144,
 		)
 	);
 
@@ -257,7 +257,6 @@ function update_odoo_stock( $sku, $product = null ) {
 				$product_id = wc_get_product_id_by_sku( $sku );
 				$product    = $product_id ? wc_get_product( $product_id ) : null;
 			}
-			teamlog( $forecasted_quantity );
 			if ( $product ) {
 				wc_update_product_stock( $product, max( 0, (int) $forecasted_quantity ) ); // Set stock to 0 if negative.
 			}
@@ -271,6 +270,56 @@ function update_odoo_stock( $sku, $product = null ) {
 	} else {
 		error_log( 'Failed to update stock: Invalid response format from Odoo.' );
 	}
+}
+function item_gifts( $item_id, $item, &$order_data ) {
+    $value_unserialized = maybe_unserialize( wc_get_order_item_meta( $item_id, '_ywapo_meta_data' ) );
+    $is_gift            = wc_get_order_item_meta( $item_id, '_fgf_gift_product' );
+    $gifts_total        = 0;
+
+    // Get order ID and order details
+    $order = wc_get_order( $item['order_id'] );
+    $billing_country = $order ? $order->get_billing_country() : '';
+
+    // List of Gulf countries excluding Saudi Arabia
+    $gulf_countries = array( 'AE', 'BH', 'KW', 'OM', 'QA' ); // UAE, Bahrain, Kuwait, Oman, Qatar
+
+    if ( $value_unserialized && empty( $is_gift ) ) {
+        $counted = count( $value_unserialized );
+        for ( $x = 0; $x < $counted; $x++ ) {
+            $desired_index = array_key_first( $value_unserialized[ $x ] );
+            $addon_id      = explode( '-', $value_unserialized[0][ $desired_index ][0] );
+
+            if ( 'product' === $addon_id[0] ) {
+                $product = wc_get_product( $addon_id[1] );
+
+                $variation      = new WC_Product_Variation( $item['variation_id'] );
+                $variation_name = implode( ' / ', $variation->get_variation_attributes() );
+                $variation_name = urldecode( str_replace( '-', ' ', $variation_name ) );
+
+                $product_name  = $product->get_name();
+                $product_sku   = $product->get_sku();
+                $product_qty   = wc_get_order_item_meta( $item_id, '_qty' );
+                $product_price = wc_get_price_excluding_tax( $product ) * $product_qty;
+
+                if ( $product_price > 0 ) {
+                    $gifts_total               += $product_price;
+                    
+                    // Check if customer is from a Gulf country (except Saudi Arabia) and adjust price
+                    $final_price = in_array( $billing_country, $gulf_countries ) 
+                        ? $product_price 
+                        : $product_price + ( $product_price * 0.15 );
+
+                    $order_data['order_line'][] = array(
+                        'default_code'    => $product_sku,
+                        'name'            => $product_name,
+                        'product_uom_qty' => $item['quantity'],
+                        'price_unit'      => $final_price,
+                    );
+                }
+            }
+        }
+    }
+    return $gifts_total;
 }
 
 
@@ -333,7 +382,7 @@ function send_orders_batch_to_odoo( $order_ids ) {
 			$missing_fields_text = implode( ', ', $missing_fields );
 			update_post_meta( $order->get_id(), 'oodo-status', 'failed' );
 			$order->add_order_note( "لم يتم إرسال الطلب إلى أودو بسبب نقص في بيانات الفوترة: $missing_fields_text.", false );
-			continue; // Skip this order
+			continue; // Skip this order.
 		}
 		$order_status  = $order->get_status();
 		$orders_temp[] = $order;
@@ -352,29 +401,52 @@ function send_orders_batch_to_odoo( $order_ids ) {
 			$product    = $item->get_product();
 			$product_id = $product->get_id();
 			$multiplier = 1;
-
+		
 			if ( $product->is_type( 'variation' ) ) {
 				$multiplier = (float) get_post_meta( $product_id, '_stock_multiplier', true );
 				$multiplier = $multiplier > 0 ? $multiplier : 1;
 			}
-
-			$quantity   = $item->get_quantity() * $multiplier;
-			$unit_price = $item->get_total() / $quantity;
-
+		
+			// Get order billing country
+			$billing_country = $order->get_billing_country();
+		
+			// Define Gulf countries excluding Saudi Arabia
+			$gulf_countries = array( 'AE', 'BH', 'KW', 'OM', 'QA' ); // UAE, Bahrain, Kuwait, Oman, Qatar
+		
+			$gifts_total = item_gifts( $item_id, $item, $order_data );
+			$item_total  = $item->get_total() - $gifts_total;
+			$quantity    = $item->get_quantity() * $multiplier;
+			$unit_price  = $item_total / $quantity;
+		
+			// Check if the customer is from a Gulf country (except Saudi Arabia) and adjust the price
+			$final_price = in_array( $billing_country, $gulf_countries ) 
+				? $unit_price 
+				: $unit_price + ( $unit_price * 0.15 );
+		
 			$order_data['order_line'][] = array(
 				'default_code'    => $product->get_sku(),
 				'name'            => $item->get_name(),
 				'product_uom_qty' => $quantity,
-				'price_unit'      => $unit_price + ( $unit_price * 0.15 ),
+				'price_unit'      => $final_price,
 			);
 		}
-
-		$order_data['order_line'][] = array(
-			'default_code'    => '1000000',
-			'name'            => 'شحن',
-			'product_uom_qty' => 1,
-			'price_unit'      => $order->get_shipping_total(),
-		);
+		
+		// Handle shipping cost
+		$shipping_cost = $order->get_shipping_total();
+		if ( $shipping_cost > 0 ) {
+			// Check if 15% should be applied
+			$final_shipping_price = in_array( $billing_country, $gulf_countries ) 
+				? $shipping_cost 
+				: $shipping_cost + ( $shipping_cost * 0.15 );
+		
+			$order_data['order_line'][] = array(
+				'default_code'    => '1000000',
+				'name'            => 'شحن',
+				'product_uom_qty' => 1,
+				'price_unit'      => $final_shipping_price,
+			);
+		}
+		
 
 		foreach ( $order->get_items( 'fee' ) as $fee_id => $fee ) {
 			$order_data['fees'][] = array(
@@ -422,14 +494,14 @@ function send_orders_batch_to_odoo( $order_ids ) {
 		return;
 	} elseif ( ! empty( $response_data ) && isset( $response_data->result->Code ) && 200 === $response_data->result->Code ) {
 
-		// Loop through the response Data array
+		// Loop through the response Data array.
 		if ( isset( $response_data->result->Data ) && is_array( $response_data->result->Data ) ) {
 			foreach ( $response_data->result->Data as $data ) {
 				if ( isset( $data->ID ) && $data->ID === false && isset( $data->StatusDescription ) && $data->StatusDescription === 'Failed' && isset( $data->woo_commerce_id ) ) {
 					if ( strpos( $data->EnglishMessage, 'already exists' ) === false ) {
 						update_post_meta( $data->woo_commerce_id, 'oodo-status', 'failed' );
 					}
-					// Add order note with Arabic message if exists
+					// Add order note with Arabic message if exists.
 					if ( isset( $data->ArabicMessage ) ) {
 						$order = wc_get_order( $data->woo_commerce_id );
 						if ( $order ) {
@@ -441,23 +513,28 @@ function send_orders_batch_to_odoo( $order_ids ) {
 			}
 		}
 	}
-
+	$sent_to_odoo = array();
 	foreach ( $response_data->result->Data as $odoo_order ) {
 		if ( $odoo_order->woo_commerce_id ) {
 			$order_id = $odoo_order->woo_commerce_id;
 			update_post_meta( $order_id, 'odoo_order', $odoo_order->ID );
 			update_post_meta( $order_id, 'odoo_order_number', $odoo_order->Number );
 			update_post_meta( $order_id, 'oodo-status', 'success' );
-			$order = wc_get_order( $order_id );
+			$sent_to_odoo[] = $order_id;
+			$order          = wc_get_order( $order_id );
 			if ( $order ) {
 				$order->add_order_note( "تم إرسال الطلب بنجاح إلى أودو برقم أودو ID: {$odoo_order->ID}.", false );
+				$sent_products = array();
 				foreach ( $order->get_items( 'line_item' ) as $item ) {
 					$product = $item->get_product();
 					if ( $product ) {
-						$sku = $product->get_sku();
+						$sent_products [] = $product->get_id();
+						$sku              = $product->get_sku();
 						update_odoo_stock( $sku, $product );
 					}
 				}
+				$sent_products_string = implode( '-', $sent_products );
+				$order->add_order_note( "تم إرسال هذه المنتجات إلى أودو {$sent_products_string}", false );
 			} else {
 				teamlog( 'Order not found' );
 			}
@@ -470,6 +547,7 @@ function send_orders_batch_to_odoo( $order_ids ) {
 			);
 		}
 	}
+	return $sent_to_odoo;
 }
 
 
@@ -648,6 +726,33 @@ add_action(
 
 
 add_filter( 'woocommerce_add_to_cart_validation', 'odoo_check_stock_before_add_to_cart', 10, 5 );
+// Add stock validation during order item addition.
+add_filter(
+	'woocommerce_ajax_add_order_item_validation',
+	function ( $validation_error, $product, $order, $qty ) {
+		if ( ! $product ) {
+			return new WP_Error( 'invalid_product', __( 'Invalid product data.', 'woocommerce' ) );
+		}
+
+		$sku          = $product->get_sku();
+		$product_id   = $product->get_id();
+		$variation_id = $product->is_type( 'variation' ) ? $product_id : $product_id;
+
+		$stock_check = check_odoo_stock( $sku, $qty, $variation_id );
+
+		if ( is_wp_error( $stock_check ) ) {
+			return $stock_check;
+		}
+
+		if ( ! $stock_check ) {
+			return new WP_Error( 'out_of_stock', __( 'مخزون المنتج غير متوفر بالكمية المطلوبة. يرجى تعديل الكمية أو اختيار منتج آخر.', 'woocommerce' ) );
+		}
+
+		return $validation_error;
+	},
+	10,
+	4
+);
 add_action(
 	'wpo_before_load_items',
 	function ( $request ) {
@@ -775,6 +880,7 @@ add_action(
 		wp_send_json_success( array( 'message' => 'Order synced successfully' ) );
 	}
 );
+
 function send_orders_batch_to_odoo_v2( $order_ids ) {
 	if ( empty( $order_ids ) || ! is_array( $order_ids ) ) {
 		return wp_send_json_error( array( 'message' => 'No order IDs provided.' ) );
@@ -848,29 +954,52 @@ function send_orders_batch_to_odoo_v2( $order_ids ) {
 			$product    = $item->get_product();
 			$product_id = $product->get_id();
 			$multiplier = 1;
-
+		
 			if ( $product->is_type( 'variation' ) ) {
 				$multiplier = (float) get_post_meta( $product_id, '_stock_multiplier', true );
 				$multiplier = $multiplier > 0 ? $multiplier : 1;
 			}
-
-			$quantity   = $item->get_quantity() * $multiplier;
-			$unit_price = $item->get_total() / $quantity;
-
+		
+			// Get order billing country
+			$billing_country = $order->get_billing_country();
+		
+			// Define Gulf countries excluding Saudi Arabia
+			$gulf_countries = array( 'AE', 'BH', 'KW', 'OM', 'QA' ); // UAE, Bahrain, Kuwait, Oman, Qatar
+		
+			$gifts_total = item_gifts( $item_id, $item, $order_data );
+			$item_total  = $item->get_total() - $gifts_total;
+			$quantity    = $item->get_quantity() * $multiplier;
+			$unit_price  = $item_total / $quantity;
+		
+			// Check if the customer is from a Gulf country (except Saudi Arabia) and adjust the price
+			$final_price = in_array( $billing_country, $gulf_countries ) 
+				? $unit_price 
+				: $unit_price + ( $unit_price * 0.15 );
+		
 			$order_data['order_line'][] = array(
 				'default_code'    => $product->get_sku(),
 				'name'            => $item->get_name(),
 				'product_uom_qty' => $quantity,
-				'price_unit'      => $unit_price + ( $unit_price * 0.15 ),
+				'price_unit'      => $final_price,
 			);
 		}
-
-		$order_data['order_line'][] = array(
-			'default_code'    => '1000000',
-			'name'            => 'شحن',
-			'product_uom_qty' => 1,
-			'price_unit'      => $order->get_shipping_total(),
-		);
+		
+		// Handle shipping cost
+		$shipping_cost = $order->get_shipping_total();
+		if ( $shipping_cost > 0 ) {
+			// Check if 15% should be applied
+			$final_shipping_price = in_array( $billing_country, $gulf_countries ) 
+				? $shipping_cost 
+				: $shipping_cost + ( $shipping_cost * 0.15 );
+		
+			$order_data['order_line'][] = array(
+				'default_code'    => '1000000',
+				'name'            => 'شحن',
+				'product_uom_qty' => 1,
+				'price_unit'      => $final_shipping_price,
+			);
+		}
+		
 
 		foreach ( $order->get_items( 'fee' ) as $fee_id => $fee ) {
 			$order_data['fees'][] = array(
@@ -927,7 +1056,7 @@ function send_orders_batch_to_odoo_v2( $order_ids ) {
 						}
 					}
 					return wp_send_json_error( array( 'message' => $data->ArabicMessage ?? 'Order failed to send.' ) );
-				} else {
+				} elseif ( ! isset( $data->ID ) || $data->ID === false || ! isset( $data->woo_commerce_id ) ) {
 					return wp_send_json_error( array( 'message' => $data->ArabicMessage ?? 'Order failed to send.' ) );
 				}
 			}
@@ -1008,3 +1137,114 @@ add_action(
 		<?php
 	}
 );
+
+add_filter( 'bulk_actions-edit-shop_order', 'register_custom_bulk_action' );
+function register_custom_bulk_action( $bulk_actions ) {
+	$bulk_actions['send_to_odoo'] = 'إرسال إلى أودو';
+	return $bulk_actions;
+}
+
+add_filter( 'handle_bulk_actions-edit-shop_order', 'handle_custom_bulk_action', 10, 3 );
+function handle_custom_bulk_action( $redirect_to, $action, $order_ids ) {
+	if ( $action !== 'send_to_odoo' ) {
+		return $redirect_to;
+	}
+
+	// Call the function to send orders
+	$sent = send_orders_batch_to_odoo( $order_ids );
+
+	// Add a query argument to show success message
+	$redirect_to = add_query_arg( 'sent_to_odoo', count( $sent ), $redirect_to );
+	return $redirect_to;
+}
+
+add_action( 'admin_notices', 'display_odoo_bulk_action_admin_notice' );
+function display_odoo_bulk_action_admin_notice() {
+	if ( ! empty( $_GET['sent_to_odoo'] ) ) {
+		$count = intval( $_GET['sent_to_odoo'] );
+		echo "<div class='updated'><p>تم إرسال {$count} طلب(ات) إلى أودو بنجاح!</p></div>";
+	}
+}
+
+add_action( 'woocommerce_order_status_changed', function( $order_id, $old_status, $new_status ) {
+    update_odoo_order_status( array( $order_id ), $new_status );
+}, 10, 3 );
+
+function update_odoo_order_status( $order_ids, $new_status = null ) {
+    if ( empty( $order_ids ) || ! is_array( $order_ids ) ) {
+        return;
+    }
+
+    $token = get_odoo_auth_token();
+    if ( ! $token ) {
+        foreach ( $order_ids as $order_id ) {
+            $order = wc_get_order( $order_id );
+            $order->add_order_note( 'فشل تحديث حالة الطلب في أودو: رمز التوثيق غير موجود.', false );
+        }
+        return false;
+    }
+
+    $orders_data = array();
+    
+    foreach ( $order_ids as $order_id ) {
+        $order = wc_get_order( $order_id );
+        if ( ! $order ) {
+            continue;
+        }
+
+        $odoo_order_id = $order->get_meta( 'odoo_order', false );
+        if ( empty( $odoo_order_id ) ) {
+            $order->add_order_note( 'لم يتم تحديث حالة الطلب في أودو: رقم الطلب في أودو غير موجود.', false );
+            continue;
+        }
+
+        // Use the new status if provided, otherwise get the current order status
+        $order_status = $new_status ?? $order->get_status();
+        
+        $order_data = array(
+            'requestID'     => $odoo_order_id,
+            'wc_order_status' => wc_get_order_statuses()[ "wc-$order_status" ] ?? $order_status,
+        );
+
+        $orders_data['orders'][] = $order_data;
+    }
+
+    if ( empty( $orders_data ) ) {
+        return;
+    }
+
+    $odoo_api_url = ODOO_BASE . 'api/sale.order/update_status';
+
+    $response = wp_remote_post(
+        $odoo_api_url,
+        array(
+            'method'  => 'POST',
+            'body'    => wp_json_encode( $orders_data ),
+            'headers' => array(
+                'Content-Type' => 'application/json',
+                'token'        => $token,
+            ),
+            'timeout' => 30,
+        )
+    );
+
+    $response_body = wp_remote_retrieve_body( $response );
+    $response_data = json_decode( $response_body );
+
+    if ( is_wp_error( $response ) || empty( $response_data ) || ! isset( $response_data->result->Code ) || 200 !== $response_data->result->Code ) {
+        foreach ( $order_ids as $order_id ) {
+            $order = wc_get_order( $order_id );
+            $order->add_order_note( 'فشل تحديث حالة الطلب في أودو: رد غير متوقع.', false );
+        }
+        return;
+    }
+    
+    foreach ( $response_data->result->Data as $odoo_order ) {
+        if ( isset( $odoo_order->requestID ) ) {
+            $order = wc_get_order( $odoo_order->requestID );
+            if ( $order ) {
+                $order->add_order_note( "تم تحديث حالة الطلب في أودو بنجاح إلى: $order_status.", false );
+            }
+        }
+    }
+}
