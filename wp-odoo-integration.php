@@ -984,7 +984,7 @@ function send_orders_batch_to_odoo_v2($order_ids)
             $coupon_data['coupon_discount_type'] = $coupon->get_discount_type(); // Coupon discount type
             $applied_coupons[] = $coupon_data;
         }
-        
+
         $billing_billing_company_vat = get_post_meta($order->get_id(), 'billing_billing_company_vat', true);
         $billing_short_address = get_post_meta($order->get_id(), 'billing_short_address', true);
         $billing_address_second = get_post_meta($order->get_id(), 'billing_address_second', true);
@@ -1305,7 +1305,7 @@ function update_odoo_order_status($order_ids, $new_status = null)
         return;
     }
 
-    $odoo_api_url = ODOO_BASE . 'api/sale.order/update_status';
+    $odoo_api_url = ODOO_BASE . 'api/sale.order/add_update_order';
 
     $response = wp_remote_post(
         $odoo_api_url,
