@@ -1,9 +1,8 @@
 <?php
-
 /**
  * Plugin Name: WordPress/Odoo Integration
  * Description: Integrates WooCommerce with Odoo to validate stock before adding products to the cart.
- * Version: 1.175
+ * Version: 1.176
  * Author: Mohammad Omar
  *
  * @package Odod
@@ -15,6 +14,10 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 define( 'ODOO_BASE', 'https://almokhlif-oud-live.odoo.com/' );
+define( 'ODOO_LOCATION', 144 );
+define( 'ODOO_DATABASE', 'kira9424646-almokhlif-oud-main-14920979' );
+define( 'ODOO_LOGIN', 'website_user@odoo.com' );
+define( 'ODOO_PASS', '123' );
 
 // Include REST API integration for Odoo.
 require_once plugin_dir_path( __FILE__ ) . 'includes/rest-api.php';
@@ -67,9 +70,9 @@ function get_odoo_auth_token() {
 		$auth_body = wp_json_encode(
 			array(
 				'params' => array(
-					'db'       => 'kira9424646-almokhlif-oud-main-14920979',
-					'login'    => 'website_user@odoo.com',
-					'password' => '123',
+					'db'       => ODOO_DATABASE,
+					'login'    => ODOO_LOGIN,
+					'password' => ODOO_PASS,
 				),
 			)
 		);
@@ -117,7 +120,7 @@ function check_odoo_stock( $sku, $quantity, $product_id ) {
 	$stock_body = json_encode(
 		array(
 			'default_code' => $sku,
-			'location_id'  => 144,
+			'location_id'  => ODOO_LOCATION,
 		)
 	);
 
@@ -238,7 +241,7 @@ function update_odoo_stock( $sku, $product = null ) {
 	$request_body = wp_json_encode(
 		array(
 			'default_code' => $sku,
-			'location_id'  => 144,
+			'location_id'  => ODOO_LOCATION,
 		)
 	);
 
