@@ -3,7 +3,7 @@
 /**
  * Plugin Name: WordPress/Odoo Integration
  * Description: Integrates WooCommerce with Odoo to validate stock before adding products to the cart.
- * Version: 1.174
+ * Version: 1.175
  * Author: Mohammad Omar
  *
  * @package Odod
@@ -80,7 +80,7 @@ function get_odoo_auth_token()
         $auth_response = wp_remote_post(
             $auth_url,
             array(
-                'headers' => array( 'Content-Type' => 'application/json' ),
+                'headers' => array('Content-Type' => 'application/json'),
                 'body'    => $auth_body,
                 'timeout' => 20,
             )
@@ -286,12 +286,12 @@ function update_odoo_stock($sku, $product = null)
                 wc_update_product_stock($product, max(0, (int) $forecasted_quantity)); // Set stock to 0 if negative.
             }
         } elseif (function_exists('teamlog')) {
-                teamlog('Failed to update stock: Invalid data received from Odoo.');
+            teamlog('Failed to update stock: Invalid data received from Odoo.');
         } else {
             error_log('Failed to update stock: Invalid data received from Odoo.');
         }
     } elseif (function_exists('teamlog')) {
-            teamlog('Failed to update stock: Invalid response format from Odoo.');
+        teamlog('Failed to update stock: Invalid response format from Odoo.');
     } else {
         error_log('Failed to update stock: Invalid response format from Odoo.');
     }
@@ -307,13 +307,13 @@ function item_gifts($item_id, $item, &$order_data, &$discount)
     $billing_country = $order ? $order->get_billing_country() : '';
 
     // List of Gulf countries excluding Saudi Arabia
-    $gulf_countries = array( 'AE', 'BH', 'KW', 'OM', 'QA' ); // UAE, Bahrain, Kuwait, Oman, Qatar
+    $gulf_countries = array('AE', 'BH', 'KW', 'OM', 'QA'); // UAE, Bahrain, Kuwait, Oman, Qatar
 
     if ($value_unserialized && empty($is_gift)) {
         $counted = count($value_unserialized);
         for ($x = 0; $x < $counted; $x++) {
-            $desired_index = array_key_first($value_unserialized[ $x ]);
-            $addon_id      = explode('-', $value_unserialized[0][ $desired_index ][0]);
+            $desired_index = array_key_first($value_unserialized[$x]);
+            $addon_id      = explode('-', $value_unserialized[0][$desired_index][0]);
 
             if ('product' === $addon_id[0]) {
                 $product = wc_get_product($addon_id[1]);
@@ -331,7 +331,7 @@ function item_gifts($item_id, $item, &$order_data, &$discount)
                 // Check if customer is from a Gulf country (except Saudi Arabia) and adjust price
                 $final_price = in_array($billing_country, $gulf_countries)
                     ? $product_price
-                    : $product_price + ( $product_price * 0.15 );
+                    : $product_price + ($product_price * 0.15);
 
 
                 if ($product_price > 0) {
@@ -400,7 +400,16 @@ function send_orders_batch_to_odoo($order_ids)
             $coupon_data['coupon_discount_type'] = $coupon->get_discount_type(); // Coupon discount type
             $applied_coupons[] = $coupon_data;
         }
-
+        $billing_billing_company_vat = get_post_meta($order->get_id(), 'billing_billing_company_vat', true);
+        $billing_short_address = get_post_meta($order->get_id(), 'billing_short_address', true);
+        $billing_address_second = get_post_meta($order->get_id(), 'billing_address_second', true);
+        $billing_building_number = get_post_meta($order->get_id(), 'billing_building_number', true);
+        $billing_district = get_post_meta($order->get_id(), 'billing_district', true);
+        if (! $billing_billing_company_vat || empty($billing_billing_company_vat)) {
+            $postcode = $order->get_billing_postcode();
+        } else {
+            $postcode = get_post_meta($order->get_id(), 'billing_postal_code', true);
+        }
         // **Validate Billing Details**
         $billing_fields = array(
             'first_name' => $order->get_billing_first_name(),
@@ -408,7 +417,12 @@ function send_orders_batch_to_odoo($order_ids)
             'address_1'  => $order->get_billing_address_1(),
             'city'       => $order->get_billing_city(),
             'state'      => $order->get_billing_state(),
-            'postcode'   => $order->get_billing_postcode(),
+            'postcode'   => $postcode,
+            'billing_billing_company_vat' => $billing_billing_company_vat,
+            'billing_short_address' => $billing_short_address,
+            'billing_address_second' => $billing_address_second,
+            'billing_building_number' => $billing_building_number,
+            'billing_district' => $billing_district,
             'country'    => $order->get_billing_country(),
             'email'      => $order->get_billing_email(),
             'phone'      => $order->get_billing_phone(),
@@ -437,7 +451,7 @@ function send_orders_batch_to_odoo($order_ids)
             'billing'         => $billing_fields,
             'order_line'      => array(),
             'payment_method'  => $order->get_payment_method_title(),
-            'wc_order_status' => wc_get_order_statuses()[ "wc-$order_status" ],
+            'wc_order_status' => wc_get_order_statuses()["wc-$order_status"],
         );
 
         foreach ($order->get_items('line_item') as $item_id => $item) {
@@ -454,7 +468,7 @@ function send_orders_batch_to_odoo($order_ids)
             $billing_country = $order->get_billing_country();
 
             // Define Gulf countries excluding Saudi Arabia
-            $gulf_countries = array( 'AE', 'BH', 'KW', 'OM', 'QA' ); // UAE, Bahrain, Kuwait, Oman, Qatar
+            $gulf_countries = array('AE', 'BH', 'KW', 'OM', 'QA'); // UAE, Bahrain, Kuwait, Oman, Qatar
             $discount = 0;
             $gifts_total = item_gifts($item_id, $item, $order_data, $discount);
             $item_total  = $item->get_total() - $gifts_total;
@@ -464,7 +478,7 @@ function send_orders_batch_to_odoo($order_ids)
             // Check if the customer is from a Gulf country (except Saudi Arabia) and adjust the price
             $final_price = in_array($billing_country, $gulf_countries)
                 ? $unit_price
-                : $unit_price + ( $unit_price * 0.15 );
+                : $unit_price + ($unit_price * 0.15);
 
             $order_data['order_line'][] = array(
                 'default_code'    => $product->get_sku(),
@@ -480,7 +494,7 @@ function send_orders_batch_to_odoo($order_ids)
             // Check if 15% should be applied
             $final_shipping_price = in_array($billing_country, $gulf_countries)
                 ? $shipping_cost
-                : $shipping_cost + ( $shipping_cost * 0.15 );
+                : $shipping_cost + ($shipping_cost * 0.15);
 
             $order_data['order_line'][] = array(
                 'default_code'    => '1000000',
@@ -500,7 +514,6 @@ function send_orders_batch_to_odoo($order_ids)
         $order_data['discount'] = odoo_get_total_coupon_discount($applied_coupons) + $discount;
         $orders_data['orders'][] = $order_data;
     }
-    teamlog(print_r($orders_data, true));
     if (empty($orders_data)) {
         return;
     }
@@ -570,7 +583,7 @@ function send_orders_batch_to_odoo($order_ids)
                 foreach ($order->get_items('line_item') as $item) {
                     $product = $item->get_product();
                     if ($product) {
-                        $sent_products [] = $product->get_id();
+                        $sent_products[] = $product->get_id();
                         $sku              = $product->get_sku();
                         update_odoo_stock($sku, $product);
                     }
@@ -638,7 +651,7 @@ function cancel_odoo_order($odoo_order_id, $order_id)
     $request_body = wp_json_encode(
         array(
             'orders' => array(
-                array( 'RequestID' => (string) $odoo_order_id ),
+                array('RequestID' => (string) $odoo_order_id),
             ),
         )
     );
@@ -810,7 +823,7 @@ add_action(
                 // Get the product object.
                 $product = wc_get_product($product_id);
                 if (! $product) {
-                    echo json_encode(array( 'error' => 'Invalid product ID.' ));
+                    echo json_encode(array('error' => 'Invalid product ID.'));
                     die();
                 }
                 // Determine if this is a variation or simple product.
@@ -857,12 +870,12 @@ add_action(
         if (! $odoo && $odoo === '') {
             return;
         }
-        ?>
+?>
     <tr class="odoo-number">
         <th><?php _e('رقم أودو:', 'woocommerce-pdf-invoices-packing-slips'); ?></th>
         <td><?php echo $odoo; ?></td>
     </tr>
-        <?php
+<?php
     },
     10,
     2
@@ -872,20 +885,20 @@ add_action(
 add_action(
     'woocommerce_thankyou',
     function ($order_id) {
-        send_orders_batch_to_odoo(array( $order_id ));
+        send_orders_batch_to_odoo(array($order_id));
     }
 );
 add_action(
     'woocommerce_checkout_phone_order_processed',
     function ($order_id) {
-        send_orders_batch_to_odoo(array( $order_id ));
+        send_orders_batch_to_odoo(array($order_id));
     }
 );
 
 add_action(
     'woocommerce_process_shop_order_meta',
     function ($order_id) {
-        send_orders_batch_to_odoo(array( $order_id ));
+        send_orders_batch_to_odoo(array($order_id));
     },
     99
 );
@@ -908,7 +921,7 @@ add_action(
     function () {
         // Validate order ID.
         if (empty($_POST['order_id']) || empty($_POST['nonce'])) {
-            wp_send_json_error(array( 'message' => 'Invalid request' ));
+            wp_send_json_error(array('message' => 'Invalid request'));
         }
 
         $order_id = intval($_POST['order_id']);
@@ -916,20 +929,20 @@ add_action(
 
         // Verify nonce for security.
         if (! wp_verify_nonce($nonce, 'sync_order_to_odoo_' . $order_id)) {
-            wp_send_json_error(array( 'message' => 'Security check failed' ));
+            wp_send_json_error(array('message' => 'Security check failed'));
         }
 
         // Call the function to sync with Odoo.
-        send_orders_batch_to_odoo_v2(array( $order_id ));
+        send_orders_batch_to_odoo_v2(array($order_id));
 
-        wp_send_json_success(array( 'message' => 'Order synced successfully' ));
+        wp_send_json_success(array('message' => 'Order synced successfully'));
     }
 );
 
 function send_orders_batch_to_odoo_v2($order_ids)
 {
     if (empty($order_ids) || ! is_array($order_ids)) {
-        return wp_send_json_error(array( 'message' => 'No order IDs provided.' ));
+        return wp_send_json_error(array('message' => 'No order IDs provided.'));
     }
 
     $token = get_odoo_auth_token();
@@ -971,6 +984,17 @@ function send_orders_batch_to_odoo_v2($order_ids)
             $coupon_data['coupon_discount_type'] = $coupon->get_discount_type(); // Coupon discount type
             $applied_coupons[] = $coupon_data;
         }
+        
+        $billing_billing_company_vat = get_post_meta($order->get_id(), 'billing_billing_company_vat', true);
+        $billing_short_address = get_post_meta($order->get_id(), 'billing_short_address', true);
+        $billing_address_second = get_post_meta($order->get_id(), 'billing_address_second', true);
+        $billing_building_number = get_post_meta($order->get_id(), 'billing_building_number', true);
+        $billing_district = get_post_meta($order->get_id(), 'billing_district', true);
+        if (! $billing_billing_company_vat || empty($billing_billing_company_vat)) {
+            $postcode = $order->get_billing_postcode();
+        } else {
+            $postcode = get_post_meta($order->get_id(), 'billing_postal_code', true);
+        }
         // **Validate Billing Details**
         $billing_fields = array(
             'first_name' => $order->get_billing_first_name(),
@@ -978,7 +1002,12 @@ function send_orders_batch_to_odoo_v2($order_ids)
             'address_1'  => $order->get_billing_address_1(),
             'city'       => $order->get_billing_city(),
             'state'      => $order->get_billing_state(),
-            'postcode'   => $order->get_billing_postcode(),
+            'postcode'   => $postcode,
+            'billing_billing_company_vat' => $billing_billing_company_vat,
+            'billing_short_address' => $billing_short_address,
+            'billing_address_second' => $billing_address_second,
+            'billing_building_number' => $billing_building_number,
+            'billing_district' => $billing_district,
             'country'    => $order->get_billing_country(),
             'email'      => $order->get_billing_email(),
             'phone'      => $order->get_billing_phone(),
@@ -1007,7 +1036,7 @@ function send_orders_batch_to_odoo_v2($order_ids)
             'billing'         => $billing_fields,
             'order_line'      => array(),
             'payment_method'  => $order->get_payment_method_title(),
-            'wc_order_status' => wc_get_order_statuses()[ "wc-$order_status" ],
+            'wc_order_status' => wc_get_order_statuses()["wc-$order_status"],
         );
 
         foreach ($order->get_items('line_item') as $item_id => $item) {
@@ -1024,7 +1053,7 @@ function send_orders_batch_to_odoo_v2($order_ids)
             $billing_country = $order->get_billing_country();
 
             // Define Gulf countries excluding Saudi Arabia
-            $gulf_countries = array( 'AE', 'BH', 'KW', 'OM', 'QA' ); // UAE, Bahrain, Kuwait, Oman, Qatar
+            $gulf_countries = array('AE', 'BH', 'KW', 'OM', 'QA'); // UAE, Bahrain, Kuwait, Oman, Qatar
             $discount = 0;
             $gifts_total = item_gifts($item_id, $item, $order_data, $discount);
             $item_total  = $item->get_total() - $gifts_total;
@@ -1034,7 +1063,7 @@ function send_orders_batch_to_odoo_v2($order_ids)
             // Check if the customer is from a Gulf country (except Saudi Arabia) and adjust the price
             $final_price = in_array($billing_country, $gulf_countries)
                 ? $unit_price
-                : $unit_price + ( $unit_price * 0.15 );
+                : $unit_price + ($unit_price * 0.15);
 
             $order_data['order_line'][] = array(
                 'default_code'    => $product->get_sku(),
@@ -1050,7 +1079,7 @@ function send_orders_batch_to_odoo_v2($order_ids)
             // Check if 15% should be applied
             $final_shipping_price = in_array($billing_country, $gulf_countries)
                 ? $shipping_cost
-                : $shipping_cost + ( $shipping_cost * 0.15 );
+                : $shipping_cost + ($shipping_cost * 0.15);
 
             $order_data['order_line'][] = array(
                 'default_code'    => '1000000',
@@ -1072,7 +1101,7 @@ function send_orders_batch_to_odoo_v2($order_ids)
     }
 
     if (empty($orders_data)) {
-        return wp_send_json_error(array( 'message' => 'No valid orders to send.' ));
+        return wp_send_json_error(array('message' => 'No valid orders to send.'));
     }
 
     $odoo_api_url = ODOO_BASE . 'api/sale.order/add_update_order';
@@ -1114,9 +1143,9 @@ function send_orders_batch_to_odoo_v2($order_ids)
                             $order->add_order_note($data->ArabicMessage, false);
                         }
                     }
-                    return wp_send_json_error(array( 'message' => $data->ArabicMessage ?? 'Order failed to send.' ));
+                    return wp_send_json_error(array('message' => $data->ArabicMessage ?? 'Order failed to send.'));
                 } elseif (! isset($data->ID) || $data->ID === false || ! isset($data->woo_commerce_id)) {
-                    return wp_send_json_error(array( 'message' => $data->ArabicMessage ?? 'Order failed to send.' ));
+                    return wp_send_json_error(array('message' => $data->ArabicMessage ?? 'Order failed to send.'));
                 }
             }
         }
@@ -1142,7 +1171,7 @@ function send_orders_batch_to_odoo_v2($order_ids)
         }
     }
 
-    return wp_send_json_success(array( 'message' => 'Orders sent to Odoo successfully.' ));
+    return wp_send_json_success(array('message' => 'Orders sent to Odoo successfully.'));
 }
 
 add_action(
@@ -1153,10 +1182,10 @@ add_action(
         if ('post.php' !== $pagenow || 'shop_order' !== get_post_type($post)) {
             return;
         }
-        ?>
+?>
     <script>
-        jQuery(document).ready(function ($) {
-            $('#sync-to-odoo').on('click', function (e) {
+        jQuery(document).ready(function($) {
+            $('#sync-to-odoo').on('click', function(e) {
                 e.preventDefault();
 
                 var button = $(this);
@@ -1177,14 +1206,14 @@ add_action(
                         order_id: orderId,
                         nonce: nonce
                     },
-                    success: function (response) {
-                        console.log( response );
+                    success: function(response) {
+                        console.log(response);
                         alert(response.data.message);
                     },
-                    error: function () {
+                    error: function() {
                         alert('Error syncing order.');
                     },
-                    complete: function () {
+                    complete: function() {
                         button.prop('disabled', false);
                         button.find('.sync-text').show();
                         button.find('.sync-loading').hide();
@@ -1193,7 +1222,7 @@ add_action(
             });
         });
     </script>
-        <?php
+<?php
     }
 );
 
@@ -1229,7 +1258,7 @@ function display_odoo_bulk_action_admin_notice()
 }
 
 add_action('woocommerce_order_status_changed', function ($order_id, $old_status, $new_status) {
-    update_odoo_order_status(array( $order_id ), $new_status);
+    update_odoo_order_status(array($order_id), $new_status);
 }, 10, 3);
 
 function update_odoo_order_status($order_ids, $new_status = null)
@@ -1266,7 +1295,7 @@ function update_odoo_order_status($order_ids, $new_status = null)
 
         $order_data = array(
             'requestID'     => $odoo_order_id,
-            'wc_order_status' => wc_get_order_statuses()[ "wc-$order_status" ] ?? $order_status,
+            'wc_order_status' => wc_get_order_statuses()["wc-$order_status"] ?? $order_status,
         );
 
         $orders_data['orders'][] = $order_data;
