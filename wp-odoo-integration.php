@@ -3,7 +3,7 @@
 /**
  * Plugin Name: WordPress/Odoo Integration
  * Description: Integrates WooCommerce with Odoo to validate stock before adding products to the cart.
- * Version: 1.179
+ * Version: 1.180
  * Author: Mohammad Omar
  *
  * @package Odod
@@ -490,7 +490,7 @@ function process_odoo_order( $order_ids, &$orders_data, &$orders_temp, $update =
 		$orders_data['orders'][] = $order_data;
 	}
 }
-function process_response( $response, $response_data, $orders_temp ) {
+function process_response( $response, $response_data, $orders_temp, $update = false ) {
 	if ( is_wp_error( $response ) || empty( $response_data ) || ! isset( $response_data->result->Code ) || 200 !== $response_data->result->Code ) {
 		if ( function_exists( 'teamlog' ) ) {
 			teamlog( 'فشل إرسال الطلبات إلى Odoo: رد غير متوقع.' );
@@ -498,7 +498,9 @@ function process_response( $response, $response_data, $orders_temp ) {
 			error_log( 'فشل إرسال الطلبات إلى Odoo: رد غير متوقع.' );
 		}
 		foreach ( $orders_temp as $order ) {
-			update_post_meta( $order->get_id(), 'oodo-status', 'failed' );
+			if ( ! $update ) {
+				update_post_meta( $order->get_id(), 'oodo-status', 'failed' );
+			}
 			$error_message = 'فشل إرسال الطلب إلى أودو: رد غير متوقع.';
 			$order->add_order_note( $error_message, false );
 		}
@@ -509,7 +511,10 @@ function process_response( $response, $response_data, $orders_temp ) {
 			foreach ( $response_data->result->Data as $data ) {
 				if ( isset( $data->ID ) && $data->ID === false && isset( $data->StatusDescription ) && $data->StatusDescription === 'Failed' && isset( $data->woo_commerce_id ) ) {
 					if ( strpos( $data->EnglishMessage, 'already exists' ) === false ) {
-						update_post_meta( $data->woo_commerce_id, 'oodo-status', 'failed' );
+						if ( ! $update ) {
+							update_post_meta( $data->woo_commerce_id, 'oodo-status', 'failed' );
+						}
+						
 					}
 					// Add order note with Arabic message if exists.
 					if ( isset( $data->ArabicMessage ) ) {
@@ -572,11 +577,10 @@ function send_orders_batch_to_odoo( $order_ids, $update = false ) {
 	}
 
 	$response = send_to_odoo( $orders_data, $token );
-	teamlog( print_r( $orders_data, true ) );
 	$response_body = wp_remote_retrieve_body( $response );
 	$response_data = json_decode( $response_body );
 
-	$resp = process_response( $response, $response_data, $orders_temp );
+	$resp = process_response( $response, $response_data, $orders_temp, $update );
 	if ( ! $resp ) {
 		return;
 	}
