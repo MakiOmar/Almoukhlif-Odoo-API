@@ -3,7 +3,7 @@
 /**
  * Plugin Name: WordPress/Odoo Integration
  * Description: Integrates WooCommerce with Odoo to validate stock before adding products to the cart.
- * Version: 1.177
+ * Version: 1.178
  * Author: Mohammad Omar
  *
  * @package Odod
@@ -352,35 +352,10 @@ function item_gifts($item_id, $item, &$order_data, &$discount)
     return $gifts_total;
 }
 
-
-function send_orders_batch_to_odoo($order_ids)
-{
-    if (empty($order_ids) || ! is_array($order_ids)) {
-        return;
-    }
-
-    $token = get_odoo_auth_token();
-    if (! $token) {
-        if (function_exists('teamlog')) {
-            teamlog('فشل إرسال الطلبات إلى Odoo: رمز التوثيق غير موجود.');
-        } else {
-            error_log('فشل إرسال الطلبات إلى Odoo: رمز التوثيق غير موجود.');
-        }
-        foreach ($order_ids as $order_id) {
-            $order = wc_get_order($order_id);
-            update_post_meta($order_id, 'oodo-status', 'failed');
-            $error_message = 'فشل إرسال الطلب إلى أودو: رد غير متوقع.';
-            $order->add_order_note($error_message, false);
-        }
-        return false;
-    }
-
-    $orders_data = array();
-    $orders_temp = array();
-
+function process_odoo_order( $order_ids, &$orders_data, &$orders_temp, $update = false ) {
     foreach ($order_ids as $order_id) {
         $odoo_order = get_post_meta($order_id, 'odoo_order', true);
-        if (! empty($odoo_order) && is_numeric($odoo_order)) {
+        if (! empty($odoo_order) && is_numeric($odoo_order) && ! $update) {
             continue;
         }
 
@@ -448,7 +423,6 @@ function send_orders_batch_to_odoo($order_ids)
         $order_status  = $order->get_status();
         $orders_temp[] = $order;
         $order_data    = array(
-            'woo_commerce_id' => $order->get_id(),
             'manual_confirm'  => false,
             'note'            => $order->get_customer_note(),
             'state'           => 'draft',
@@ -457,7 +431,11 @@ function send_orders_batch_to_odoo($order_ids)
             'payment_method'  => $order->get_payment_method_title(),
             'wc_order_status' => wc_get_order_statuses()["wc-$order_status"],
         );
-
+        if ( $update ) {
+            $order_data['requestID'] = $odoo_order;
+        } else {
+            $order_data['woo_commerce_id'] = $order->get_id();
+        }
         foreach ($order->get_items('line_item') as $item_id => $item) {
             $product    = $item->get_product();
             $product_id = $product->get_id();
@@ -517,28 +495,8 @@ function send_orders_batch_to_odoo($order_ids)
         $order_data['discount']  = odoo_get_total_coupon_discount($applied_coupons) + $discount;
         $orders_data['orders'][] = $order_data;
     }
-    if (empty($orders_data)) {
-        return;
-    }
-
-    $odoo_api_url = ODOO_BASE . 'api/sale.order/add_update_order';
-
-    $response = wp_remote_post(
-        $odoo_api_url,
-        array(
-            'method'  => 'POST',
-            'body'    => wp_json_encode($orders_data),
-            'headers' => array(
-                'Content-Type' => 'application/json',
-                'token'        => $token,
-            ),
-            'timeout' => 30,
-        )
-    );
-
-    $response_body = wp_remote_retrieve_body($response);
-    $response_data = json_decode($response_body);
-
+}
+function process_response( $response, $response_data, $orders_temp ) {
     if (is_wp_error($response) || empty($response_data) || ! isset($response_data->result->Code) || 200 !== $response_data->result->Code) {
         if (function_exists('teamlog')) {
             teamlog('فشل إرسال الطلبات إلى Odoo: رد غير متوقع.');
@@ -550,7 +508,7 @@ function send_orders_batch_to_odoo($order_ids)
             $error_message = 'فشل إرسال الطلب إلى أودو: رد غير متوقع.';
             $order->add_order_note($error_message, false);
         }
-        return;
+        exit;
     } elseif (! empty($response_data) && isset($response_data->result->Code) && 200 === $response_data->result->Code) {
         // Loop through the response Data array.
         if (isset($response_data->result->Data) && is_array($response_data->result->Data)) {
@@ -566,22 +524,82 @@ function send_orders_batch_to_odoo($order_ids)
                             $order->add_order_note($data->ArabicMessage, false);
                         }
                     }
-                    return;
+                    exit;
                 }
             }
         }
     }
+}
+function send_to_odoo( $orders_data, $token ) {
+    $odoo_api_url = ODOO_BASE . 'api/sale.order/add_update_order';
+
+    return wp_remote_post(
+        $odoo_api_url,
+        array(
+            'method'  => 'POST',
+            'body'    => wp_json_encode($orders_data),
+            'headers' => array(
+                'Content-Type' => 'application/json',
+                'token'        => $token,
+            ),
+            'timeout' => 30,
+        )
+    );
+}
+function send_orders_batch_to_odoo($order_ids, $update = false)
+{
+    if (empty($order_ids) || ! is_array($order_ids)) {
+        return;
+    }
+
+    $token = get_odoo_auth_token();
+    if (! $token) {
+        if (function_exists('teamlog')) {
+            teamlog('فشل إرسال الطلبات إلى Odoo: رمز التوثيق غير موجود.');
+        } else {
+            error_log('فشل إرسال الطلبات إلى Odoo: رمز التوثيق غير موجود.');
+        }
+        foreach ($order_ids as $order_id) {
+            $order = wc_get_order($order_id);
+            update_post_meta($order_id, 'oodo-status', 'failed');
+            $error_message = 'فشل إرسال الطلب إلى أودو: رد غير متوقع.';
+            $order->add_order_note($error_message, false);
+        }
+        return false;
+    }
+
+    $orders_data = array();
+    $orders_temp = array();
+
+    process_odoo_order( $order_ids, $orders_data, $orders_temp );
+
+    if (empty($orders_data)) {
+        return;
+    }
+    $response = send_to_odoo( $orders_data, $token );
+
+    $response_body = wp_remote_retrieve_body($response);
+    $response_data = json_decode($response_body);
+
+    process_response( $response, $response_data, $orders_temp );
+
     $sent_to_odoo = array();
     foreach ($response_data->result->Data as $odoo_order) {
         if ($odoo_order->woo_commerce_id) {
             $order_id = $odoo_order->woo_commerce_id;
-            update_post_meta($order_id, 'odoo_order', $odoo_order->ID);
-            update_post_meta($order_id, 'odoo_order_number', $odoo_order->Number);
-            update_post_meta($order_id, 'oodo-status', 'success');
+            if ( ! $update ) {
+                update_post_meta($order_id, 'odoo_order', $odoo_order->ID);
+                update_post_meta($order_id, 'odoo_order_number', $odoo_order->Number);
+                update_post_meta($order_id, 'oodo-status', 'success');
+            }
             $sent_to_odoo[] = $order_id;
             $order          = wc_get_order($order_id);
             if ($order) {
-                $order->add_order_note("تم إرسال الطلب بنجاح إلى أودو برقم أودو ID: {$odoo_order->ID}.", false);
+                if ( ! $update ) {
+                    $order->add_order_note("تم إرسال الطلب بنجاح إلى أودو برقم أودو ID: {$odoo_order->ID}.", false);
+                } else {
+                    $order->add_order_note("تم تحديث الطلب بنجاح إلى أودو برقم أودو ID: {$odoo_order->ID}.", false);
+                }
                 $sent_products = array();
                 foreach ($order->get_items('line_item') as $item) {
                     $product = $item->get_product();
@@ -592,7 +610,11 @@ function send_orders_batch_to_odoo($order_ids)
                     }
                 }
                 $sent_products_string = implode('-', $sent_products);
-                $order->add_order_note("تم إرسال هذه المنتجات إلى أودو {$sent_products_string}", false);
+                if ( ! $update ) {
+                    $order->add_order_note("تم إرسال هذه المنتجات إلى أودو {$sent_products_string}", false);
+                } else {
+                    $order->add_order_note("تم تحديث هذه المنتجات إلى أودو {$sent_products_string}", false);
+                }
             } else {
                 teamlog('Order not found');
             }
@@ -897,11 +919,16 @@ add_action(
         send_orders_batch_to_odoo(array($order_id));
     }
 );
-
 add_action(
     'woocommerce_process_shop_order_meta',
     function ($order_id) {
-        send_orders_batch_to_odoo(array($order_id));
+        $odoo_order = get_post_meta($order_id, 'odoo_order', true);
+        $update = true;
+        if ( ! $odoo_order || empty( $odoo_order ) ) {
+            $update = false;
+        }
+        send_orders_batch_to_odoo(array($order_id),$update);
+        
     },
     99
 );
@@ -962,164 +989,13 @@ function send_orders_batch_to_odoo_v2($order_ids)
     $orders_data = array();
     $orders_temp = array();
 
-    foreach ($order_ids as $order_id) {
-        $odoo_order = get_post_meta($order_id, 'odoo_order', true);
-        if (! empty($odoo_order) && is_numeric($odoo_order)) {
-            continue;
-        }
-
-        $order = wc_get_order($order_id);
-        if (! $order) {
-            continue;
-        }
-        $applied_coupons = array();
-        // Loop through coupon items for this order
-        foreach ($order->get_items('coupon') as $item) {
-            $coupon_data = array(
-                'coupon_name'         => $item->get_name(), // Coupon name
-                'coupon_code'         => $item->get_code(), // Coupon code
-                'coupon_discount'     => $item->get_discount(), // Discount amount
-                'coupon_discount_tax' => $item->get_discount_tax(), // Discount tax amount
-            );
-
-            $coupon = new WC_Coupon($coupon_data['coupon_code']); // Get the WC_Coupon object
-
-            $coupon_data['coupon_discount_type'] = $coupon->get_discount_type(); // Coupon discount type
-            $applied_coupons[]                   = $coupon_data;
-        }
-
-        $billing_billing_company_vat = get_post_meta($order->get_id(), 'billing_billing_company_vat', true);
-        $billing_short_address       = get_post_meta($order->get_id(), 'billing_short_address', true);
-        $billing_address_second      = get_post_meta($order->get_id(), 'billing_address_second', true);
-        $billing_building_number     = get_post_meta($order->get_id(), 'billing_building_number', true);
-        $billing_district            = get_post_meta($order->get_id(), 'billing_district', true);
-        if (! $billing_billing_company_vat || empty($billing_billing_company_vat)) {
-            $postcode = $order->get_billing_postcode();
-        } else {
-            $postcode = get_post_meta($order->get_id(), 'billing_postal_code', true);
-        }
-        // **Validate Billing Details**
-        $billing_fields = array(
-            'first_name'                  => $order->get_billing_first_name(),
-            'last_name'                   => $order->get_billing_last_name(),
-            'address_1'                   => $order->get_billing_address_1(),
-            'city'                        => $order->get_billing_city(),
-            'state'                       => $order->get_billing_state(),
-            'postcode'                    => $postcode,
-            'company_vat'                 => $billing_billing_company_vat,
-            'short_address'               => $billing_short_address,
-            'address_second'              => $billing_address_second,
-            'building_number'             => $billing_building_number,
-            'district'                    => $billing_district,
-            'country'                     => $order->get_billing_country(),
-            'email'                       => $order->get_billing_email(),
-            'phone'                       => $order->get_billing_phone(),
-        );
-
-        $missing_fields = array();
-        foreach ($billing_fields as $field => $value) {
-            if (empty($value)) {
-                // $missing_fields[] = ucfirst( str_replace( '_', ' ', $field ) );
-            }
-        }
-
-        if (! empty($missing_fields)) {
-            $missing_fields_text = implode(', ', $missing_fields);
-            update_post_meta($order->get_id(), 'oodo-status', 'failed');
-            $order->add_order_note("لم يتم إرسال الطلب إلى أودو بسبب نقص في بيانات الفوترة: $missing_fields_text.", false);
-            continue; // Skip this order
-        }
-        $order_status  = $order->get_status();
-        $orders_temp[] = $order;
-        $order_data    = array(
-            'woo_commerce_id' => $order->get_id(),
-            'manual_confirm'  => false,
-            'note'            => $order->get_customer_note(),
-            'state'           => 'draft',
-            'billing'         => $billing_fields,
-            'order_line'      => array(),
-            'payment_method'  => $order->get_payment_method_title(),
-            'wc_order_status' => wc_get_order_statuses()["wc-$order_status"],
-        );
-
-        foreach ($order->get_items('line_item') as $item_id => $item) {
-            $product    = $item->get_product();
-            $product_id = $product->get_id();
-            $multiplier = 1;
-
-            if ($product->is_type('variation')) {
-                $multiplier = (float) get_post_meta($product_id, '_stock_multiplier', true);
-                $multiplier = $multiplier > 0 ? $multiplier : 1;
-            }
-
-            // Get order billing country
-            $billing_country = $order->get_billing_country();
-
-            // Define Gulf countries excluding Saudi Arabia
-            $gulf_countries = array('AE', 'BH', 'KW', 'OM', 'QA'); // UAE, Bahrain, Kuwait, Oman, Qatar
-            $discount       = 0;
-            $gifts_total    = item_gifts($item_id, $item, $order_data, $discount);
-            $item_total     = $item->get_total() - $gifts_total;
-            $quantity       = $item->get_quantity() * $multiplier;
-            $unit_price     = $product->get_price() / $quantity;
-
-            // Check if the customer is from a Gulf country (except Saudi Arabia) and adjust the price
-            $final_price = in_array($billing_country, $gulf_countries)
-                ? $unit_price
-                : $unit_price + ($unit_price * 0.15);
-
-            $order_data['order_line'][] = array(
-                'default_code'    => $product->get_sku(),
-                'name'            => $item->get_name(),
-                'product_uom_qty' => $quantity,
-                'price_unit'      => $final_price,
-            );
-        }
-
-        // Handle shipping cost
-        $shipping_cost = $order->get_shipping_total();
-        if ($shipping_cost > 0) {
-            // Check if 15% should be applied
-            $final_shipping_price = in_array($billing_country, $gulf_countries)
-                ? $shipping_cost
-                : $shipping_cost + ($shipping_cost * 0.15);
-
-            $order_data['order_line'][] = array(
-                'default_code'    => '1000000',
-                'name'            => 'شحن',
-                'product_uom_qty' => 1,
-                'price_unit'      => $final_shipping_price,
-            );
-        }
-
-        foreach ($order->get_items('fee') as $fee_id => $fee) {
-            $order_data['fees'][] = array(
-                'name'  => $fee->get_name(),
-                'total' => $fee->get_amount(),
-            );
-        }
-        $order_data['discount']  = odoo_get_total_coupon_discount($applied_coupons) + $discount;
-        $orders_data['orders'][] = $order_data;
-    }
+    process_odoo_order( $order_ids, $orders_data, $orders_temp );
 
     if (empty($orders_data)) {
         return wp_send_json_error(array('message' => 'No valid orders to send.'));
     }
 
-    $odoo_api_url = ODOO_BASE . 'api/sale.order/add_update_order';
-
-    $response = wp_remote_post(
-        $odoo_api_url,
-        array(
-            'method'  => 'POST',
-            'body'    => wp_json_encode($orders_data),
-            'headers' => array(
-                'Content-Type' => 'application/json',
-                'token'        => $token,
-            ),
-            'timeout' => 30,
-        )
-    );
+    $response = send_to_odoo( $orders_data, $token );
 
     $response_body = wp_remote_retrieve_body($response);
     $response_data = json_decode($response_body);
@@ -1259,15 +1135,6 @@ function display_odoo_bulk_action_admin_notice()
     }
 }
 
-add_action(
-    'woocommerce_order_status_changed',
-    function ($order_id, $old_status, $new_status) {
-        update_odoo_order_status(array($order_id), $new_status);
-    },
-    10,
-    3
-);
-
 function update_odoo_order_status($order_ids, $new_status = null)
 {
     if (empty($order_ids) || ! is_array($order_ids)) {
@@ -1290,8 +1157,7 @@ function update_odoo_order_status($order_ids, $new_status = null)
         if (! $order) {
             continue;
         }
-
-        $odoo_order_id = $order->get_meta('odoo_order', false);
+        $odoo_order_id = get_post_meta($order_id, 'odoo_order', true);
         if (empty($odoo_order_id)) {
             $order->add_order_note('لم يتم تحديث حالة الطلب في أودو: رقم الطلب في أودو غير موجود.', false);
             continue;
