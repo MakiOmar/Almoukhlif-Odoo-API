@@ -142,6 +142,7 @@ function check_odoo_stock($sku, $quantity, $product_id)
     );
 
     if (is_wp_error($stock_response)) {
+        delete_transient( 'odoo_auth_token' );
         return new WP_Error('stock_api_error', $message);
     }
 
