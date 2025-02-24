@@ -3,7 +3,7 @@
 /**
  * Plugin Name: WordPress/Odoo Integration
  * Description: Integrates WooCommerce with Odoo to validate stock before adding products to the cart.
- * Version: 1.192
+ * Version: 1.193
  * Author: Mohammad Omar
  *
  * @package Odod
@@ -13,7 +13,7 @@
 if (! defined('ABSPATH')) {
     exit;
 }
-$opts = get_options('Anony_Options');
+$opts = get_option('Anony_Options');
 if (is_array($opts)) {
     define('ODOO_BASE', $opts['odoo_url']);
     define('ODOO_DATABASE', $opts['odoo_database']);
