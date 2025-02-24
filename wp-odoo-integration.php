@@ -3,7 +3,7 @@
 /**
  * Plugin Name: WordPress/Odoo Integration
  * Description: Integrates WooCommerce with Odoo to validate stock before adding products to the cart.
- * Version: 1.191
+ * Version: 1.192
  * Author: Mohammad Omar
  *
  * @package Odod
@@ -13,12 +13,20 @@
 if (! defined('ABSPATH')) {
     exit;
 }
-
-define('ODOO_BASE', 'https://almokhlif-oud-live.odoo.com/');
-define('ODOO_LOCATION', 144);
-define('ODOO_DATABASE', 'kira9424646-almokhlif-oud-main-14920979');
-define('ODOO_LOGIN', 'website_user@odoo.com');
-define('ODOO_PASS', '123');
+$opts = get_options('Anony_Options');
+if (is_array($opts)) {
+    define('ODOO_BASE', $opts['odoo_url']);
+    define('ODOO_DATABASE', $opts['odoo_database']);
+    define('ODOO_LOGIN', $opts['odoo_username']);
+    define('ODOO_PASS', $opts['odoo_pass']);
+    define('ODOO_LOCATION', $opts['odoo_location']);
+} else {
+    define('ODOO_BASE', '');
+    define('ODOO_DATABASE', '');
+    define('ODOO_LOGIN', '');
+    define('ODOO_PASS', '');
+    define('ODOO_LOCATION', '');
+}
 
 // Include REST API integration for Odoo.
 require_once plugin_dir_path(__FILE__) . 'includes/rest-api.php';
@@ -344,7 +352,7 @@ function item_gifts($item_id, $item, &$order_data, &$discount)
                         'name'            => $product_name,
                         'product_uom_qty' => $item['quantity'],
                         'price_unit'      => $final_price,
-                        'discount'        => $discount > 0 ? $product_price * ( $discount / 100 ) : 0,
+                        'discount'        => $discount > 0 ? $product_price * ($discount / 100) : 0,
                     );
                 }
             }
@@ -440,7 +448,7 @@ function process_odoo_order($order_ids, &$orders_data, &$orders_temp, $update = 
             $order_data['woo_commerce_id'] = $order->get_id();
         }
         $line_items = $order->get_items('line_item');
-        $items_count = count( $line_items );
+        $items_count = count($line_items);
         $item_discount = $applied_coupons_discount / $items_count;
         $discount       = 0;
         foreach ($line_items as $item_id => $item) {
@@ -461,9 +469,9 @@ function process_odoo_order($order_ids, &$orders_data, &$orders_temp, $update = 
             // Calculate discount percentage
             $line_subtotal = $item->get_subtotal();
             $line_total = $item->get_total();
-			$discount_percent = ( $line_subtotal > 0 )
-				? round( ( ( $line_subtotal - $line_total ) / $line_subtotal ) * 100, 2 )
-				: 100;
+            $discount_percent = ($line_subtotal > 0)
+                ? round((($line_subtotal - $line_total) / $line_subtotal) * 100, 2)
+                : 100;
             $gifts_total    = item_gifts($item_id, $item, $order_data, $discount_percent);
             $quantity       = $item->get_quantity() * $multiplier;
             $unit_price     = $product->get_price() / $quantity;
@@ -509,7 +517,7 @@ function process_odoo_order($order_ids, &$orders_data, &$orders_temp, $update = 
         $order_data['discount']  = $applied_coupons_discount + $discount;
         $orders_data['orders'][] = $order_data;
     }
-	teamlog( print_r( $orders_data, true ) );
+    teamlog(print_r($orders_data, true));
 }
 function process_response($response, $response_data, $orders_temp, $update = false)
 {
