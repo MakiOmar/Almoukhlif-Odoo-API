@@ -25,6 +25,30 @@ add_filter(
 			'validate' => 'no_html',
 			'default'  => $key,
 		);
+		$general['fields'][] = array(
+			'id'       => 'odoo_url',
+			'title'    => esc_html__( 'Odoo url', 'smartpage' ),
+			'type'     => 'text',
+			'validate' => 'no_html',
+		);
+		$general['fields'][] = array(
+			'id'       => 'odoo_database',
+			'title'    => esc_html__( 'Odoo Database', 'smartpage' ),
+			'type'     => 'text',
+			'validate' => 'no_html',
+		);
+		$general['fields'][] = array(
+			'id'       => 'odoo_username',
+			'title'    => esc_html__( 'Odoo username', 'smartpage' ),
+			'type'     => 'text',
+			'validate' => 'no_html',
+		);
+		$general['fields'][] = array(
+			'id'       => 'odoo_pass',
+			'title'    => esc_html__( 'Odoo password', 'smartpage' ),
+			'type'     => 'text',
+			'validate' => 'no_html',
+		);
 		return $general;
 	}
 );
