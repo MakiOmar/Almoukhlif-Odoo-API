@@ -49,6 +49,12 @@ add_filter(
 			'type'     => 'text',
 			'validate' => 'no_html',
 		);
+		$general['fields'][] = array(
+			'id'       => 'odoo_location',
+			'title'    => esc_html__( 'Odoo location', 'smartpage' ),
+			'type'     => 'text',
+			'validate' => 'no_html',
+		);
 		return $general;
 	}
 );
