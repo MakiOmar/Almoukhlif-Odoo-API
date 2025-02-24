@@ -3,7 +3,7 @@
 /**
  * Plugin Name: WordPress/Odoo Integration
  * Description: Integrates WooCommerce with Odoo to validate stock before adding products to the cart.
- * Version: 1.184
+ * Version: 1.185
  * Author: Mohammad Omar
  *
  * @package Odod
@@ -380,6 +380,7 @@ function process_odoo_order($order_ids, &$orders_data, &$orders_temp, $update = 
             $coupon_data['coupon_discount_type'] = $coupon->get_discount_type(); // Coupon discount type
             $applied_coupons[]                   = $coupon_data;
         }
+        $applied_coupons_discount    = odoo_get_total_coupon_discount($applied_coupons);
         $billing_billing_company_vat = get_post_meta($order->get_id(), 'billing_billing_company_vat', true);
         $billing_short_address       = get_post_meta($order->get_id(), 'billing_short_address', true);
         $billing_address_second      = get_post_meta($order->get_id(), 'billing_address_second', true);
@@ -437,7 +438,10 @@ function process_odoo_order($order_ids, &$orders_data, &$orders_temp, $update = 
         } else {
             $order_data['woo_commerce_id'] = $order->get_id();
         }
-        foreach ($order->get_items('line_item') as $item_id => $item) {
+        $line_items = $order->get_items('line_item');
+        $items_count = count( $line_items );
+        $item_discount = $applied_coupons_discount / $items_count;
+        foreach ($line_items as $item_id => $item) {
             $product    = $item->get_product();
             $product_id = $product->get_id();
             $multiplier = 1;
@@ -454,7 +458,6 @@ function process_odoo_order($order_ids, &$orders_data, &$orders_temp, $update = 
             $gulf_countries = array('AE', 'BH', 'KW', 'OM', 'QA'); // UAE, Bahrain, Kuwait, Oman, Qatar
             $discount       = 0;
             $gifts_total    = item_gifts($item_id, $item, $order_data, $discount);
-            $item_total     = $item->get_total() - $gifts_total;
             $quantity       = $item->get_quantity() * $multiplier;
             $unit_price     = $product->get_price() / $quantity;
 
@@ -468,6 +471,7 @@ function process_odoo_order($order_ids, &$orders_data, &$orders_temp, $update = 
                 'name'            => $item->get_name(),
                 'product_uom_qty' => $quantity,
                 'price_unit'      => $final_price,
+                'discount'        => $item_discount,
             );
             if ($item->get_total() < 1) {
                 $discount += $product->get_price() * 1.15;
@@ -496,7 +500,7 @@ function process_odoo_order($order_ids, &$orders_data, &$orders_temp, $update = 
                 'total' => $fee->get_amount(),
             );
         }
-        $order_data['discount']  = odoo_get_total_coupon_discount($applied_coupons) + $discount;
+        $order_data['discount']  = $applied_coupons_discount + $discount;
         $orders_data['orders'][] = $order_data;
     }
 }

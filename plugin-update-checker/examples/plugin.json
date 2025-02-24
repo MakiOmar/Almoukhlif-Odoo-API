@@ -1,6 +1,6 @@
  {
  	"name" : "AnonyEngine",
- 	"version" : "1.184",
+ 	"version" : "1.185",
  	"download_url" : "https://github.com/MakiOmar/Almoukhlif-Odoo-API/archive/refs/heads/master.zip",
  	"sections" : {
  		"description" : "Al-Mokhlifoud odoo integration"
