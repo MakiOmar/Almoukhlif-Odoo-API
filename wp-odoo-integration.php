@@ -3,7 +3,7 @@
 /**
  * Plugin Name: WordPress/Odoo Integration
  * Description: Integrates WooCommerce with Odoo to validate stock before adding products to the cart.
- * Version: 1.185
+ * Version: 1.186
  * Author: Mohammad Omar
  *
  * @package Odod
@@ -344,6 +344,7 @@ function item_gifts($item_id, $item, &$order_data, &$discount)
                         'name'            => $product_name,
                         'product_uom_qty' => $item['quantity'],
                         'price_unit'      => $final_price,
+                        'discount'        => $final_price - ( $final_price * $discount ),
                     );
                 }
             }
@@ -457,7 +458,11 @@ function process_odoo_order($order_ids, &$orders_data, &$orders_temp, $update = 
             // Define Gulf countries excluding Saudi Arabia
             $gulf_countries = array('AE', 'BH', 'KW', 'OM', 'QA'); // UAE, Bahrain, Kuwait, Oman, Qatar
             $discount       = 0;
-            $gifts_total    = item_gifts($item_id, $item, $order_data, $discount);
+            // Calculate discount percentage
+            $line_subtotal = $item->get_subtotal();
+            $line_total = $item->get_total();
+            $discount_percent = $line_subtotal > 0 ? (($line_subtotal - $line_total) / $line_subtotal) * 100 : 0;
+            $gifts_total    = item_gifts($item_id, $item, $order_data, $discount_percent);
             $quantity       = $item->get_quantity() * $multiplier;
             $unit_price     = $product->get_price() / $quantity;
 
@@ -471,7 +476,7 @@ function process_odoo_order($order_ids, &$orders_data, &$orders_temp, $update = 
                 'name'            => $item->get_name(),
                 'product_uom_qty' => $quantity,
                 'price_unit'      => $final_price,
-                'discount'        => $item_discount,
+                'discount'        => $final_price - ( $final_price * $discount_percent ),
             );
             if ($item->get_total() < 1) {
                 $discount += $product->get_price() * 1.15;
