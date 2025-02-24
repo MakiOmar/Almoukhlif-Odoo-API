@@ -3,7 +3,7 @@
 /**
  * Plugin Name: WordPress/Odoo Integration
  * Description: Integrates WooCommerce with Odoo to validate stock before adding products to the cart.
- * Version: 1.187
+ * Version: 1.188
  * Author: Mohammad Omar
  *
  * @package Odod
@@ -344,7 +344,7 @@ function item_gifts($item_id, $item, &$order_data, &$discount)
                         'name'            => $product_name,
                         'product_uom_qty' => $item['quantity'],
                         'price_unit'      => $final_price,
-                        'discount'        => $product->get_price() - ( $product->get_price() * $discount ),
+                        'discount'        => $discount > 0 ? $product_price * ( $discount / 100 ) : 0,
                     );
                 }
             }
@@ -461,7 +461,9 @@ function process_odoo_order($order_ids, &$orders_data, &$orders_temp, $update = 
             // Calculate discount percentage
             $line_subtotal = $item->get_subtotal();
             $line_total = $item->get_total();
-            $discount_percent = $line_subtotal > 0 ? (($line_subtotal - $line_total) / $line_subtotal) * 100 : 0;
+			$discount_percent = ( $line_subtotal > 0 )
+				? round( ( ( $line_subtotal - $line_total ) / $line_subtotal ) * 100, 2 )
+				: 100;
             $gifts_total    = item_gifts($item_id, $item, $order_data, $discount_percent);
             $quantity       = $item->get_quantity() * $multiplier;
             $unit_price     = $product->get_price() / $quantity;
@@ -470,13 +472,12 @@ function process_odoo_order($order_ids, &$orders_data, &$orders_temp, $update = 
             $final_price = in_array($billing_country, $gulf_countries)
                 ? $unit_price
                 : $unit_price + ($unit_price * 0.15);
-
             $order_data['order_line'][] = array(
                 'default_code'    => $product->get_sku(),
                 'name'            => $item->get_name(),
                 'product_uom_qty' => $quantity,
                 'price_unit'      => $final_price,
-                'discount'        => $product->get_price() - ( $product->get_price() * $discount_percent ),
+                'discount'        => $discount_percent > 0 ? $product->get_price() * ($discount_percent / 100) : 0,
             );
             if ($item->get_total() < 1) {
                 $discount += $product->get_price() * 1.15;
@@ -508,6 +509,7 @@ function process_odoo_order($order_ids, &$orders_data, &$orders_temp, $update = 
         $order_data['discount']  = $applied_coupons_discount + $discount;
         $orders_data['orders'][] = $order_data;
     }
+	teamlog( print_r( $orders_data, true ) );
 }
 function process_response($response, $response_data, $orders_temp, $update = false)
 {
