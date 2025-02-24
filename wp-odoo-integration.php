@@ -3,7 +3,7 @@
 /**
  * Plugin Name: WordPress/Odoo Integration
  * Description: Integrates WooCommerce with Odoo to validate stock before adding products to the cart.
- * Version: 1.194
+ * Version: 1.195
  * Author: Mohammad Omar
  *
  * @package Odod
@@ -488,7 +488,7 @@ function process_odoo_order($order_ids, &$orders_data, &$orders_temp, $update = 
                 'discount'        => $discount_percent > 0 ? $product->get_price() * ($discount_percent / 100) : 0,
             );
             if ($item->get_total() < 1) {
-                $discount += $product->get_price() * 1.15;
+                $discount += $product->get_price();
             }
         }
 
