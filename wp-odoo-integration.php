@@ -3,7 +3,7 @@
 /**
  * Plugin Name: WordPress/Odoo Integration
  * Description: Integrates WooCommerce with Odoo to validate stock before adding products to the cart.
- * Version: 1.198
+ * Version: 1.199
  * Author: Mohammad Omar
  *
  * @package Odod
@@ -771,6 +771,7 @@ function snks_validate_order_delivery_on_completion($order_id)
         'orders' => array(
             array(
                 'RequestID' => (string) $odoo_order_id,
+                'modified_date' => current_time('Y-m-d H:i:s'),
             ),
         ),
     );
