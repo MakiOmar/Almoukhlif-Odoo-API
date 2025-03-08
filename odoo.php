@@ -29,6 +29,14 @@ function odoo_orders_with_meta_admin_page() {
 		'odoo-missing-status-orders',
 		'display_odoo_missing_status_orders_page'
 	);
+	add_submenu_page(
+		'odoo-orders',
+		esc_html__( 'All Missing Status Orders', 'text-domain' ),
+		esc_html__( 'All Missing Status Orders', 'text-domain' ),
+		'manage_woocommerce',
+		'all-odoo-missing-status-orders',
+		'display_all_odoo_missing_status_orders_page'
+	);
 
 	add_submenu_page(
 		'odoo-orders',
