@@ -32,6 +32,7 @@ if (is_array($opts)) {
 require_once plugin_dir_path(__FILE__) . 'includes/rest-api.php';
 require_once plugin_dir_path(__FILE__) . 'failed-orders.php';
 require_once plugin_dir_path(__FILE__) . 'not-sent-orders.php';
+require_once plugin_dir_path(__FILE__) . 'not-sent-orders-all.php';
 require_once plugin_dir_path(__FILE__) . 'odoo.php';
 
 require plugin_dir_path(__FILE__) . 'plugin-update-checker/plugin-update-checker.php';
