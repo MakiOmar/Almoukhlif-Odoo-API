@@ -4,20 +4,31 @@
  */
 
 defined( 'ABSPATH' ) || die;
-/**
- * Display the admin page content for orders without Odoo status.
- */
 function display_all_odoo_missing_status_orders_page() {
-	// Set the number of orders to display per page
+	// Set the number of orders to display per page.
 	$orders_per_page = 10;
 
-	// Get the current page number
+	// Get the current page number.
 	$paged = isset( $_GET['paged'] ) ? max( 1, intval( $_GET['paged'] ) ) : 1;
 
-	// Fetch orders without oodo-status meta key created after February 1, 2025.
+	// Get excluded statuses from the request.
+	$excluded_statuses = isset( $_GET['excluded_statuses'] ) ? (array) $_GET['excluded_statuses'] : array();
+
+	// Get all WooCommerce order statuses.
+	$statuses = wc_get_order_statuses();
+
+	// Build the meta query for orders missing 'oodo-status'.
+	$meta_query = array(
+		array(
+			'key'     => 'oodo-status',
+			'compare' => 'NOT EXISTS', // Fetch orders that do not have this meta key.
+		),
+	);
+
+	// Build the query args.
 	$args = array(
 		'post_type'      => 'shop_order',
-		'post_status'    => 'any',
+		'post_status'    => array_diff( array_keys( $statuses ), $excluded_statuses ),
 		'orderby'        => 'date',
 		'order'          => 'DESC',
 		'posts_per_page' => $orders_per_page,
@@ -28,22 +39,30 @@ function display_all_odoo_missing_status_orders_page() {
 				'inclusive' => true,
 			),
 		),
-		'meta_query'     => array(
-			array(
-				'key'     => 'oodo-status',
-				'compare' => 'NOT EXISTS', // Fetch orders that do not have this meta key
-			),
-		),
+		'meta_query'     => $meta_query,
 	);
-
+	var_dump( $args );
 	$orders_query = new WP_Query( $args );
 	$orders       = $orders_query->posts;
-
-	// Calculate total number of pages
-	$total_pages = $orders_query->max_num_pages;
+	$total_pages  = $orders_query->max_num_pages;
 	?>
 	<div class="wrap">
 		<h1><?php esc_html_e( 'Orders Without Odoo Status', 'text-domain' ); ?></h1>
+
+		<form method="GET" style="direction:rtl">
+			<input type="hidden" name="page" value="<?php echo esc_attr( $_GET['page'] ); ?>">
+			<div style="margin-bottom: 15px;">
+				<strong><?php esc_html_e( 'Exclude Order Statuses:', 'text-domain' ); ?></strong><br>
+				<?php foreach ( $statuses as $status_key => $status_label ) : ?>
+					<label style="margin-right: 10px;display:inline-flex;width:15%;align-items:center">
+						<input type="checkbox" name="excluded_statuses[]" value="<?php echo esc_attr( $status_key ); ?>" <?php checked( in_array( $status_key, $excluded_statuses ) ); ?>>&nbsp;
+						<?php echo esc_html( $status_label ); ?>
+					</label>
+				<?php endforeach; ?>
+				<button type="submit" class="button button-primary">Apply Filter</button>
+			</div>
+		</form>
+
 		<table class="widefat fixed" cellspacing="0">
 			<thead>
 				<tr>
@@ -58,12 +77,11 @@ function display_all_odoo_missing_status_orders_page() {
 				<?php if ( ! empty( $orders ) ) : ?>
 					<?php foreach ( $orders as $order_post ) : ?>
 						<?php
-						$order      = wc_get_order( $order_post->ID );
-						$order_name = $order->get_formatted_billing_full_name();
+						$order = wc_get_order( $order_post->ID );
 						?>
 						<tr>
 							<td><?php echo esc_html( $order->get_id() ); ?></td>
-							<td><?php echo esc_html( $order_name ); ?></td>
+							<td><?php echo esc_html( $order->get_formatted_billing_full_name() ); ?></td>
 							<td><?php echo wc_price( $order->get_total() ); ?></td>
 							<td><?php echo esc_html( ucfirst( $order->get_status() ) ); ?></td>
 							<td>
@@ -83,7 +101,6 @@ function display_all_odoo_missing_status_orders_page() {
 			</tbody>
 		</table>
 
-		<!-- Pagination -->
 		<div class="tablenav">
 			<div class="tablenav-pages">
 				<?php
