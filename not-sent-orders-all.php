@@ -44,13 +44,13 @@ function display_all_odoo_missing_status_orders_page() {
 	$date_query = array();
 	if ( ! empty( $from_date ) ) {
 		$date_query['after'] = $from_date;
+	} else {
+		$date_query['after'] = '2025-02-17'; // Default if no date is provided
 	}
 	if ( ! empty( $to_date ) ) {
 		$date_query['before'] = $to_date;
 	}
-	if ( ! empty( $date_query ) ) {
-		$date_query['inclusive'] = true;
-	}
+	$date_query['inclusive'] = true;
 
 	// Build the query args.
 	$args = array(
@@ -64,7 +64,7 @@ function display_all_odoo_missing_status_orders_page() {
 		'meta_query'     => array(
 			array(
 				'key'     => 'oodo-status',
-				'compare' => 'NOT EXISTS', // Fetch orders that do not have this meta key.
+				'compare' => 'NOT EXISTS',
 			),
 		),
 	);
@@ -76,8 +76,6 @@ function display_all_odoo_missing_status_orders_page() {
 		<h1><?php esc_html_e( 'Orders Without Odoo Status', 'text-domain' ); ?></h1>
 
 		<form method="GET" style="direction:rtl">
-			<input type="hidden" name="page" value="<?php echo esc_attr( $_GET['page'] ); ?>">
-
 			<div style="margin-bottom: 15px;">
 				<strong><?php esc_html_e( 'Filter by Date Range:', 'text-domain' ); ?></strong><br>
 				<label>
@@ -89,7 +87,7 @@ function display_all_odoo_missing_status_orders_page() {
 					<input type="date" name="to_date" value="<?php echo esc_attr( $to_date ); ?>">
 				</label>
 			</div>
-
+			<input type="hidden" name="page" value="<?php echo esc_attr( $_GET['page'] ); ?>">
 			<div style="margin-bottom: 15px;">
 				<strong><?php esc_html_e( 'Exclude Order Statuses:', 'text-domain' ); ?></strong><br>
 
@@ -126,7 +124,7 @@ function display_all_odoo_missing_status_orders_page() {
 						<?php
 						$order = wc_get_order( $order_post->ID );
 						$status_key = 'wc-' . $order->get_status();
-						$status_label = isset( $statuses[ $status_key ] ) ? $statuses[ $status_key ] : ucfirst( $order->get_status() );
+						$status_label = isset( $statuses[ $status_key ] ) ? $statuses[ $status_key ] : ucfirst( $order->get_status() ); // Fetch label if available.
 						?>
 						<tr>
 							<td><?php echo esc_html( $order->get_id() ); ?></td>
@@ -167,9 +165,22 @@ function display_all_odoo_missing_status_orders_page() {
 			</div>
 		</div>
 	</div>
+
+	<!-- JavaScript for Check All functionality -->
+	<script>
+		document.addEventListener("DOMContentLoaded", function () {
+			const checkAllBox = document.getElementById("check_all_statuses");
+			const checkboxes = document.querySelectorAll(".status-checkbox");
+
+			checkAllBox.addEventListener("change", function () {
+				checkboxes.forEach(checkbox => {
+					checkbox.checked = checkAllBox.checked;
+				});
+			});
+		});
+	</script>
 	<?php
 }
-
 function add_missing_all_status_orders_admin_bar_item( $wp_admin_bar ) {
 	if ( ! current_user_can( 'manage_woocommerce' ) ) {
 		return;
@@ -203,13 +214,13 @@ function add_missing_all_status_orders_admin_bar_item( $wp_admin_bar ) {
 	$date_query = array();
 	if ( ! empty( $from_date ) ) {
 		$date_query['after'] = $from_date;
+	} else {
+		$date_query['after'] = '2025-02-17'; // Default if no date is provided
 	}
 	if ( ! empty( $to_date ) ) {
 		$date_query['before'] = $to_date;
 	}
-	if ( ! empty( $date_query ) ) {
-		$date_query['inclusive'] = true;
-	}
+	$date_query['inclusive'] = true;
 
 	// Fetch the count of orders without Odoo status.
 	$args = array(
@@ -230,17 +241,8 @@ function add_missing_all_status_orders_admin_bar_item( $wp_admin_bar ) {
 	$count  = count( $orders );
 	$color  = $count > 0 ? 'red' : 'green';
 
-	// Generate the URL for the admin page, keeping user-selected filters in the query string.
+	// Generate the URL for the admin page.
 	$admin_url = admin_url( 'admin.php?page=all-odoo-missing-status-orders' );
-
-	// Preserve excluded statuses in the URL.
-	if ( ! empty( $user_excluded_statuses ) ) {
-		foreach ( $user_excluded_statuses as $index => $status ) {
-			$admin_url = add_query_arg( "excluded_statuses[$index]", $status, $admin_url );
-		}
-	}
-
-	// Preserve date filters in the URL.
 	if ( ! empty( $from_date ) ) {
 		$admin_url = add_query_arg( 'from_date', $from_date, $admin_url );
 	}
@@ -248,7 +250,6 @@ function add_missing_all_status_orders_admin_bar_item( $wp_admin_bar ) {
 		$admin_url = add_query_arg( 'to_date', $to_date, $admin_url );
 	}
 
-	// Add a menu item to the admin bar.
 	$wp_admin_bar->add_node(
 		array(
 			'id'    => 'all_missing_odoo_status_orders',
