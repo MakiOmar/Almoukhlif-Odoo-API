@@ -101,12 +101,14 @@ function display_all_odoo_missing_status_orders_page() {
 					<?php foreach ( $orders as $order_post ) : ?>
 						<?php
 						$order = wc_get_order( $order_post->ID );
+						$status_key = 'wc-' . $order->get_status();
+						$status_label = isset( $statuses[ $status_key ] ) ? $statuses[ $status_key ] : ucfirst( $order->get_status() );
 						?>
 						<tr>
 							<td><?php echo esc_html( $order->get_id() ); ?></td>
 							<td><?php echo esc_html( $order->get_formatted_billing_full_name() ); ?></td>
 							<td><?php echo wc_price( $order->get_total() ); ?></td>
-							<td><?php echo esc_html( ucfirst( $order->get_status() ) ); ?></td>
+							<td><?php echo esc_html( $status_label ); ?></td>
 							<td>
 								<a href="<?php echo esc_url( admin_url( 'post.php?post=' . $order->get_id() . '&action=edit' ) ); ?>">
 									<?php esc_html_e( 'View Order', 'text-domain' ); ?>
