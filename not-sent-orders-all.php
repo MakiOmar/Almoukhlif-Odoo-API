@@ -14,21 +14,32 @@ function display_all_odoo_missing_status_orders_page() {
 	// Get excluded statuses from the request.
 	$excluded_statuses = isset( $_GET['excluded_statuses'] ) ? (array) $_GET['excluded_statuses'] : array();
 
+	// Define statuses that should always be removed from the filter & query.
+	$always_excluded_statuses = array(
+		'wc-user-changed',
+		'wc-refunded',
+		'wc-pending',
+		'wc-cancel-request',
+		'wc-cancelled',
+		'wc-was-canceled',
+		'wc-completed',
+		'wc-custom-failed',
+		'wc-checkout-draft',
+		'wc-failed',
+	);
+
 	// Get all WooCommerce order statuses.
 	$statuses = wc_get_order_statuses();
 
-	// Build the meta query for orders missing 'oodo-status'.
-	$meta_query = array(
-		array(
-			'key'     => 'oodo-status',
-			'compare' => 'NOT EXISTS', // Fetch orders that do not have this meta key.
-		),
-	);
+	// Remove permanently excluded statuses from the filter options.
+	foreach ( $always_excluded_statuses as $status ) {
+		unset( $statuses[ $status ] );
+	}
 
 	// Build the query args.
-	$args = array(
+	$args         = array(
 		'post_type'      => 'shop_order',
-		'post_status'    => array_diff( array_keys( $statuses ), $excluded_statuses ),
+		'post_status'    => array_diff( array_keys( $statuses ), $excluded_statuses ), // Apply user-selected exclusions
 		'orderby'        => 'date',
 		'order'          => 'DESC',
 		'posts_per_page' => $orders_per_page,
@@ -39,9 +50,13 @@ function display_all_odoo_missing_status_orders_page() {
 				'inclusive' => true,
 			),
 		),
-		'meta_query'     => $meta_query,
+		'meta_query'     => array(
+			array(
+				'key'     => 'oodo-status',
+				'compare' => 'NOT EXISTS', // Fetch orders that do not have this meta key.
+			),
+		),
 	);
-	var_dump( $args );
 	$orders_query = new WP_Query( $args );
 	$orders       = $orders_query->posts;
 	$total_pages  = $orders_query->max_num_pages;
@@ -53,13 +68,21 @@ function display_all_odoo_missing_status_orders_page() {
 			<input type="hidden" name="page" value="<?php echo esc_attr( $_GET['page'] ); ?>">
 			<div style="margin-bottom: 15px;">
 				<strong><?php esc_html_e( 'Exclude Order Statuses:', 'text-domain' ); ?></strong><br>
+
+				<!-- Check All Box -->
+				<label style="margin-right: 10px;display:inline-flex;width:15%;align-items:center">
+					<input type="checkbox" id="check_all_statuses">&nbsp;
+					<strong><?php esc_html_e( 'Check All', 'text-domain' ); ?></strong>
+				</label>
+
 				<?php foreach ( $statuses as $status_key => $status_label ) : ?>
 					<label style="margin-right: 10px;display:inline-flex;width:15%;align-items:center">
-						<input type="checkbox" name="excluded_statuses[]" value="<?php echo esc_attr( $status_key ); ?>" <?php checked( in_array( $status_key, $excluded_statuses ) ); ?>>&nbsp;
+						<input type="checkbox" class="status-checkbox" name="excluded_statuses[]" value="<?php echo esc_attr( $status_key ); ?>" <?php checked( in_array( $status_key, $excluded_statuses ) ); ?>>&nbsp;
 						<?php echo esc_html( $status_label ); ?>
 					</label>
 				<?php endforeach; ?>
-				<button type="submit" class="button button-primary">Apply Filter</button>
+
+				<button type="submit" class="button button-primary"><?php esc_html_e( 'Apply Filter', 'text-domain' ); ?></button>
 			</div>
 		</form>
 
@@ -118,21 +141,52 @@ function display_all_odoo_missing_status_orders_page() {
 			</div>
 		</div>
 	</div>
+
+	<!-- JavaScript for Check All functionality -->
+	<script>
+		document.addEventListener("DOMContentLoaded", function () {
+			const checkAllBox = document.getElementById("check_all_statuses");
+			const checkboxes = document.querySelectorAll(".status-checkbox");
+
+			checkAllBox.addEventListener("change", function () {
+				checkboxes.forEach(checkbox => {
+					checkbox.checked = checkAllBox.checked;
+				});
+			});
+		});
+	</script>
 	<?php
 }
 
-/**
- * Add a link with a count of orders missing Odoo status to the admin bar.
- */
 function add_missing_all_status_orders_admin_bar_item( $wp_admin_bar ) {
 	if ( ! current_user_can( 'manage_woocommerce' ) ) {
 		return;
 	}
 
+	// Get user-selected excluded statuses from URL parameters.
+	$user_excluded_statuses = isset( $_GET['excluded_statuses'] ) ? array_map( 'sanitize_text_field', (array) $_GET['excluded_statuses'] ) : array();
+
+	// Define statuses that should always be excluded.
+	$always_excluded_statuses = array(
+		'wc-user-changed',
+		'wc-refunded',
+		'wc-pending',
+		'wc-cancel-request',
+		'wc-cancelled',
+		'wc-was-canceled',
+		'wc-completed',
+		'wc-custom-failed',
+		'wc-checkout-draft',
+		'wc-failed',
+	);
+
+	// Merge user-selected and always-excluded statuses.
+	$excluded_statuses = array_unique( array_merge( $always_excluded_statuses, $user_excluded_statuses ) );
+
 	// Fetch the count of orders without Odoo status meta key created after February 1, 2025.
 	$args = array(
 		'post_type'      => 'shop_order',
-		'post_status'    => 'any',
+		'post_status'    => array_diff( array_keys( wc_get_order_statuses() ), $excluded_statuses ), // Exclude both user-selected & always-excluded
 		'posts_per_page' => -1,
 		'date_query'     => array(
 			array(
@@ -153,6 +207,14 @@ function add_missing_all_status_orders_admin_bar_item( $wp_admin_bar ) {
 	$count  = count( $orders );
 	$color  = $count > 0 ? 'red' : 'green';
 
+	// Generate the URL for the admin page, keeping user-excluded statuses in array format.
+	$admin_url = admin_url( 'admin.php?page=all-odoo-missing-status-orders' );
+	if ( ! empty( $user_excluded_statuses ) ) {
+		foreach ( $user_excluded_statuses as $index => $status ) {
+			$admin_url = add_query_arg( "excluded_statuses[$index]", $status, $admin_url );
+		}
+	}
+
 	// Add a menu item to the admin bar.
 	$wp_admin_bar->add_node(
 		array(
@@ -163,8 +225,9 @@ function add_missing_all_status_orders_admin_bar_item( $wp_admin_bar ) {
 				esc_html__( 'All Missing Odoo Status', 'text-domain' ),
 				$count
 			),
-			'href'  => admin_url( 'admin.php?page=all-odoo-missing-status-orders' ),
+			'href'  => $admin_url,
 		)
 	);
 }
+
 add_action( 'admin_bar_menu', 'add_missing_all_status_orders_admin_bar_item', 100 );
