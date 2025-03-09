@@ -442,7 +442,7 @@ function process_odoo_order($order_ids, &$orders_data, &$orders_temp, $update = 
             'order_line'      => array(),
             'payment_method'  => $order->get_payment_method_title(),
             'wc_order_status' => wc_get_order_statuses()["wc-$order_status"],
-            'modified_date'   => $order->get_date_modified() ? $order->get_date_modified()->date('Y-m-d H:i:s') : null,
+            'created_date'    => $order->get_date_created() ? $order->get_date_created()->date('Y-m-d H:i:s') : null,
         );
         if ($update) {
             $order_data['RequestID'] = $odoo_order;
@@ -490,7 +490,7 @@ function process_odoo_order($order_ids, &$orders_data, &$orders_temp, $update = 
                 'discount'        => $discount_percent > 0 ? $discount_percent : 0,
             );
             if ($item->get_total() < 1) {
-                $discount += $product->get_price();
+                $discount += $product->get_price() * $item->get_quantity();
             }
         }
 
