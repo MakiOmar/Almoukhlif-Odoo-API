@@ -14,6 +14,10 @@ function display_all_odoo_missing_status_orders_page() {
 	// Get excluded statuses from the request.
 	$excluded_statuses = isset( $_GET['excluded_statuses'] ) ? (array) $_GET['excluded_statuses'] : array();
 
+	// Get date range filters from the request.
+	$from_date = isset( $_GET['from_date'] ) ? sanitize_text_field( $_GET['from_date'] ) : '';
+	$to_date   = isset( $_GET['to_date'] ) ? sanitize_text_field( $_GET['to_date'] ) : '';
+
 	// Define statuses that should always be removed from the filter & query.
 	$always_excluded_statuses = array(
 		'wc-user-changed',
@@ -36,20 +40,27 @@ function display_all_odoo_missing_status_orders_page() {
 		unset( $statuses[ $status ] );
 	}
 
+	// Build the date query.
+	$date_query = array();
+	if ( ! empty( $from_date ) ) {
+		$date_query['after'] = $from_date;
+	}
+	if ( ! empty( $to_date ) ) {
+		$date_query['before'] = $to_date;
+	}
+	if ( ! empty( $date_query ) ) {
+		$date_query['inclusive'] = true;
+	}
+
 	// Build the query args.
-	$args         = array(
+	$args = array(
 		'post_type'      => 'shop_order',
 		'post_status'    => array_diff( array_keys( $statuses ), $excluded_statuses ), // Apply user-selected exclusions
 		'orderby'        => 'date',
 		'order'          => 'DESC',
 		'posts_per_page' => $orders_per_page,
 		'paged'          => $paged,
-		'date_query'     => array(
-			array(
-				'after'     => '2025-02-17',
-				'inclusive' => true,
-			),
-		),
+		'date_query'     => array( $date_query ), // Apply date range filter
 		'meta_query'     => array(
 			array(
 				'key'     => 'oodo-status',
@@ -66,6 +77,19 @@ function display_all_odoo_missing_status_orders_page() {
 
 		<form method="GET" style="direction:rtl">
 			<input type="hidden" name="page" value="<?php echo esc_attr( $_GET['page'] ); ?>">
+
+			<div style="margin-bottom: 15px;">
+				<strong><?php esc_html_e( 'Filter by Date Range:', 'text-domain' ); ?></strong><br>
+				<label>
+					<?php esc_html_e( 'From:', 'text-domain' ); ?>
+					<input type="date" name="from_date" value="<?php echo esc_attr( $from_date ); ?>">
+				</label>
+				<label>
+					<?php esc_html_e( 'To:', 'text-domain' ); ?>
+					<input type="date" name="to_date" value="<?php echo esc_attr( $to_date ); ?>">
+				</label>
+			</div>
+
 			<div style="margin-bottom: 15px;">
 				<strong><?php esc_html_e( 'Exclude Order Statuses:', 'text-domain' ); ?></strong><br>
 
@@ -143,20 +167,6 @@ function display_all_odoo_missing_status_orders_page() {
 			</div>
 		</div>
 	</div>
-
-	<!-- JavaScript for Check All functionality -->
-	<script>
-		document.addEventListener("DOMContentLoaded", function () {
-			const checkAllBox = document.getElementById("check_all_statuses");
-			const checkboxes = document.querySelectorAll(".status-checkbox");
-
-			checkAllBox.addEventListener("change", function () {
-				checkboxes.forEach(checkbox => {
-					checkbox.checked = checkAllBox.checked;
-				});
-			});
-		});
-	</script>
 	<?php
 }
 
@@ -167,6 +177,10 @@ function add_missing_all_status_orders_admin_bar_item( $wp_admin_bar ) {
 
 	// Get user-selected excluded statuses from URL parameters.
 	$user_excluded_statuses = isset( $_GET['excluded_statuses'] ) ? array_map( 'sanitize_text_field', (array) $_GET['excluded_statuses'] ) : array();
+
+	// Get user-selected date filters.
+	$from_date = isset( $_GET['from_date'] ) ? sanitize_text_field( $_GET['from_date'] ) : '';
+	$to_date   = isset( $_GET['to_date'] ) ? sanitize_text_field( $_GET['to_date'] ) : '';
 
 	// Define statuses that should always be excluded.
 	$always_excluded_statuses = array(
@@ -185,17 +199,24 @@ function add_missing_all_status_orders_admin_bar_item( $wp_admin_bar ) {
 	// Merge user-selected and always-excluded statuses.
 	$excluded_statuses = array_unique( array_merge( $always_excluded_statuses, $user_excluded_statuses ) );
 
-	// Fetch the count of orders without Odoo status meta key created after February 1, 2025.
+	// Build the date query.
+	$date_query = array();
+	if ( ! empty( $from_date ) ) {
+		$date_query['after'] = $from_date;
+	}
+	if ( ! empty( $to_date ) ) {
+		$date_query['before'] = $to_date;
+	}
+	if ( ! empty( $date_query ) ) {
+		$date_query['inclusive'] = true;
+	}
+
+	// Fetch the count of orders without Odoo status.
 	$args = array(
 		'post_type'      => 'shop_order',
 		'post_status'    => array_diff( array_keys( wc_get_order_statuses() ), $excluded_statuses ), // Exclude both user-selected & always-excluded
 		'posts_per_page' => -1,
-		'date_query'     => array(
-			array(
-				'after'     => '2025-02-17',
-				'inclusive' => true,
-			),
-		),
+		'date_query'     => array( $date_query ), // Apply date range filter
 		'meta_query'     => array(
 			array(
 				'key'     => 'oodo-status',
@@ -209,12 +230,22 @@ function add_missing_all_status_orders_admin_bar_item( $wp_admin_bar ) {
 	$count  = count( $orders );
 	$color  = $count > 0 ? 'red' : 'green';
 
-	// Generate the URL for the admin page, keeping user-excluded statuses in array format.
+	// Generate the URL for the admin page, keeping user-selected filters in the query string.
 	$admin_url = admin_url( 'admin.php?page=all-odoo-missing-status-orders' );
+
+	// Preserve excluded statuses in the URL.
 	if ( ! empty( $user_excluded_statuses ) ) {
 		foreach ( $user_excluded_statuses as $index => $status ) {
 			$admin_url = add_query_arg( "excluded_statuses[$index]", $status, $admin_url );
 		}
+	}
+
+	// Preserve date filters in the URL.
+	if ( ! empty( $from_date ) ) {
+		$admin_url = add_query_arg( 'from_date', $from_date, $admin_url );
+	}
+	if ( ! empty( $to_date ) ) {
+		$admin_url = add_query_arg( 'to_date', $to_date, $admin_url );
 	}
 
 	// Add a menu item to the admin bar.
