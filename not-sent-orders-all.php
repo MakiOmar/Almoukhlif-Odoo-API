@@ -6,7 +6,7 @@
 defined( 'ABSPATH' ) || die;
 function display_all_odoo_missing_status_orders_page() {
 	// Set the number of orders to display per page.
-	$orders_per_page = 10;
+	$orders_per_page = 50;
 
 	// Get the current page number.
 	$paged = isset( $_GET['paged'] ) ? max( 1, intval( $_GET['paged'] ) ) : 1;
@@ -51,6 +51,12 @@ function display_all_odoo_missing_status_orders_page() {
 		$date_query['before'] = $to_date;
 	}
 	$date_query['inclusive'] = true;
+
+	// Process bulk send action if submitted.
+	if ( isset( $_POST['bulk_send_odoo'] ) && ! empty( $_POST['order_ids'] ) ) {
+		send_orders_batch_to_odoo( $_POST['order_ids'] );
+		echo '<div class="updated"><p>' . esc_html__( 'Selected orders have been sent to Odoo.', 'text-domain' ) . '</p></div>';
+	}
 
 	// Build the query args.
 	$args = array(
@@ -108,79 +114,68 @@ function display_all_odoo_missing_status_orders_page() {
 			</div>
 		</form>
 
-		<table class="widefat fixed" cellspacing="0">
-			<thead>
-				<tr>
-					<th><?php esc_html_e( 'Order ID', 'text-domain' ); ?></th>
-					<th><?php esc_html_e( 'Customer Name', 'text-domain' ); ?></th>
-					<th><?php esc_html_e( 'Total', 'text-domain' ); ?></th>
-					<th><?php esc_html_e( 'Status', 'text-domain' ); ?></th>
-					<th><?php esc_html_e( 'Actions', 'text-domain' ); ?></th>
-				</tr>
-			</thead>
-			<tbody>
-				<?php if ( ! empty( $orders ) ) : ?>
-					<?php foreach ( $orders as $order_post ) : ?>
-						<?php
-						$order = wc_get_order( $order_post->ID );
-						$status_key = 'wc-' . $order->get_status();
-						$status_label = isset( $statuses[ $status_key ] ) ? $statuses[ $status_key ] : ucfirst( $order->get_status() ); // Fetch label if available.
-						?>
+		<form method="POST">
+			<table class="widefat fixed" cellspacing="0">
+				<thead>
+					<tr>
+						<th><input type="checkbox" id="select_all" /></th>
+						<th><?php esc_html_e( 'Order ID', 'text-domain' ); ?></th>
+						<th><?php esc_html_e( 'Customer Name', 'text-domain' ); ?></th>
+						<th><?php esc_html_e( 'Total', 'text-domain' ); ?></th>
+						<th><?php esc_html_e( 'Status', 'text-domain' ); ?></th>
+						<th><?php esc_html_e( 'Date', 'text-domain' ); ?></th>
+						<th><?php esc_html_e( 'Actions', 'text-domain' ); ?></th>
+					</tr>
+				</thead>
+				<tbody>
+					<?php if ( ! empty( $orders ) ) : ?>
+						<?php foreach ( $orders as $order_post ) : ?>
+							<?php
+							$order = wc_get_order( $order_post->ID );
+							$status_key = 'wc-' . $order->get_status();
+							$status_label = isset( $statuses[ $status_key ] ) ? $statuses[ $status_key ] : ucfirst( $order->get_status() );
+							?>
+							<tr>
+								<td><input type="checkbox" name="order_ids[]" value="<?php echo esc_attr( $order->get_id() ); ?>" /></td>
+								<td><?php echo esc_html( $order->get_id() ); ?></td>
+								<td><?php echo esc_html( $order->get_formatted_billing_full_name() ); ?></td>
+								<td><?php echo wc_price( $order->get_total() ); ?></td>
+								<td><?php echo esc_html( $status_label ); ?></td>
+								<td><?php echo esc_html( $order->get_date_created()->date('Y-m-d H:i:s') ); ?></td>
+								<td>
+									<a href="<?php echo esc_url( admin_url( 'post.php?post=' . $order->get_id() . '&action=edit' ) ); ?>">
+										<?php esc_html_e( 'View Order', 'text-domain' ); ?>
+									</a>
+								</td>
+							</tr>
+						<?php endforeach; ?>
+					<?php else : ?>
 						<tr>
-							<td><?php echo esc_html( $order->get_id() ); ?></td>
-							<td><?php echo esc_html( $order->get_formatted_billing_full_name() ); ?></td>
-							<td><?php echo wc_price( $order->get_total() ); ?></td>
-							<td><?php echo esc_html( $status_label ); ?></td>
-							<td>
-								<a href="<?php echo esc_url( admin_url( 'post.php?post=' . $order->get_id() . '&action=edit' ) ); ?>">
-									<?php esc_html_e( 'View Order', 'text-domain' ); ?>
-								</a>
+							<td colspan="7">
+								<?php esc_html_e( 'No orders without Odoo status found.', 'text-domain' ); ?>
 							</td>
 						</tr>
-					<?php endforeach; ?>
-				<?php else : ?>
-					<tr>
-						<td colspan="5">
-							<?php esc_html_e( 'No orders without Odoo status found.', 'text-domain' ); ?>
-						</td>
-					</tr>
-				<?php endif; ?>
-			</tbody>
-		</table>
+					<?php endif; ?>
+				</tbody>
+			</table>
 
-		<div class="tablenav">
-			<div class="tablenav-pages">
-				<?php
-				echo paginate_links(
-					array(
-						'base'      => add_query_arg( 'paged', '%#%' ),
-						'format'    => '',
-						'prev_text' => __( '&laquo; Previous', 'text-domain' ),
-						'next_text' => __( 'Next &raquo;', 'text-domain' ),
-						'total'     => $total_pages,
-						'current'   => $paged,
-					)
-				);
-				?>
-			</div>
-		</div>
-	</div>
+			<?php if ( ! empty( $orders ) ) : ?>
+				<p>
+					<input type="submit" name="bulk_send_odoo" class="button-primary" value="<?php esc_attr_e( 'Send Selected to Odoo', 'text-domain' ); ?>" />
+				</p>
+			<?php endif; ?>
+		</form>
 
-	<!-- JavaScript for Check All functionality -->
-	<script>
-		document.addEventListener("DOMContentLoaded", function () {
-			const checkAllBox = document.getElementById("check_all_statuses");
-			const checkboxes = document.querySelectorAll(".status-checkbox");
-
-			checkAllBox.addEventListener("change", function () {
-				checkboxes.forEach(checkbox => {
-					checkbox.checked = checkAllBox.checked;
-				});
+		<script>
+			document.getElementById('select_all').addEventListener('click', function() {
+				const checkboxes = document.querySelectorAll('input[name="order_ids[]"]');
+				checkboxes.forEach(checkbox => checkbox.checked = this.checked);
 			});
-		});
-	</script>
+		</script>
+	</div>
 	<?php
 }
+
 function add_missing_all_status_orders_admin_bar_item( $wp_admin_bar ) {
 	if ( ! current_user_can( 'manage_woocommerce' ) ) {
 		return;
