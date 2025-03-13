@@ -3,7 +3,7 @@
 /**
  * Plugin Name: WordPress/Odoo Integration
  * Description: Integrates WooCommerce with Odoo to validate stock before adding products to the cart.
- * Version: 1.206
+ * Version: 1.207
  * Author: Mohammad Omar
  *
  * @package Odod
@@ -19,7 +19,7 @@ if (is_array($opts)) {
     define('ODOO_DATABASE', $opts['odoo_database']);
     define('ODOO_LOGIN', $opts['odoo_username']);
     define('ODOO_PASS', $opts['odoo_pass']);
-    define('ODOO_LOCATION', absint( $opts['odoo_location'] ));
+    define('ODOO_LOCATION', absint($opts['odoo_location']));
 } else {
     define('ODOO_BASE', '');
     define('ODOO_DATABASE', '');
@@ -799,7 +799,7 @@ function snks_validate_order_delivery_on_completion($order_id)
             'timeout' => 20,
         )
     );
-
+    teamlog( 'Deliver validation:' .  print_r( $response, true ) );
     // معالجة الرد.
     if (is_wp_error($response)) {
         $order->add_order_note('خطأ أثناء إرسال البيانات إلى واجهة Odoo API: ' . $response->get_error_message(), false);
@@ -930,12 +930,12 @@ add_action(
         if (! $odoo && $odoo === '') {
             return;
         }
-?>
+        ?>
     <tr class="odoo-number">
         <th><?php _e('رقم أودو:', 'woocommerce-pdf-invoices-packing-slips'); ?></th>
         <td><?php echo $odoo; ?></td>
     </tr>
-<?php
+        <?php
     },
     10,
     2
@@ -955,9 +955,9 @@ add_action(
     }
 );
 
-add_action( 'woocommerce_order_status_changed', function( $order_id, $old_status, $new_status ) {
-    update_odoo_order_status( array( $order_id ), $new_status );
-}, 10, 3 );
+add_action('woocommerce_order_status_changed', function ($order_id, $old_status, $new_status) {
+    update_odoo_order_status(array( $order_id ), $new_status);
+}, 10, 3);
 
 add_action(
     'woocommerce_admin_order_data_after_order_details',
@@ -1086,7 +1086,7 @@ add_action(
         if ('post.php' !== $pagenow || 'shop_order' !== get_post_type($post)) {
             return;
         }
-?>
+        ?>
     <script>
         jQuery(document).ready(function($) {
             $('#sync-to-odoo').on('click', function(e) {
@@ -1126,7 +1126,7 @@ add_action(
             });
         });
     </script>
-<?php
+        <?php
     }
 );
 
@@ -1239,3 +1239,11 @@ function update_odoo_order_status($order_ids, $new_status = null)
         }
     }
 }
+
+add_action('woocommerce_order_status_pending', function ($order_id) {
+    $order = wc_get_order( $order_id );
+
+    if ($order->get_status() == 'pending') {
+        remove_action('woocommerce_order_status_pending', 'wc_maybe_increase_stock_levels');
+    }
+}, 9);
