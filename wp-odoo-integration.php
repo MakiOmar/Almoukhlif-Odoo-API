@@ -3,7 +3,7 @@
 /**
  * Plugin Name: WordPress/Odoo Integration
  * Description: Integrates WooCommerce with Odoo to validate stock before adding products to the cart.
- * Version: 1.207
+ * Version: 1.208
  * Author: Mohammad Omar
  *
  * @package Odod
@@ -1195,6 +1195,7 @@ function update_odoo_order_status($order_ids, $new_status = null)
         $order_data = array(
             'RequestID'       => $odoo_order_id,
             'wc_order_status' => wc_get_order_statuses()["wc-$order_status"] ?? $order_status,
+            'modified_number' => current_time('Y-m-d H:i:s'),
         );
 
         $orders_data['orders'][] = $order_data;
