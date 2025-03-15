@@ -22,7 +22,7 @@ function display_all_odoo_missing_status_orders_page() {
 	$always_excluded_statuses = array(
 		'wc-user-changed',
 		'wc-refunded',
-		'wc-pending',
+		//'wc-pending',
 		'wc-cancel-request',
 		'wc-cancelled',
 		'wc-was-canceled',
@@ -192,7 +192,7 @@ function add_missing_all_status_orders_admin_bar_item( $wp_admin_bar ) {
 	$always_excluded_statuses = array(
 		'wc-user-changed',
 		'wc-refunded',
-		'wc-pending',
+		//'wc-pending',
 		'wc-cancel-request',
 		'wc-cancelled',
 		'wc-was-canceled',
