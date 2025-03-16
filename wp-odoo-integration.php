@@ -3,10 +3,10 @@
 /**
  * Plugin Name: WordPress/Odoo Integration
  * Description: Integrates WooCommerce with Odoo to validate stock before adding products to the cart.
- * Version: 1.209
+ * Version: 1.210
  * Author: Mohammad Omar
  *
- * @package Odod
+ * @package Odoo
  */
 
 // Exit if accessed directly.
@@ -593,8 +593,14 @@ function send_orders_batch_to_odoo($order_ids, $update = false)
         }
         foreach ($order_ids as $order_id) {
             $order = wc_get_order($order_id);
-            update_post_meta($order_id, 'oodo-status', 'failed');
-            $error_message = 'فشل إرسال الطلب إلى أودو: رد غير متوقع.';
+            $odoo_order_id =  get_post_meta($order->get_id(), 'odoo_order', true);
+            if ( ! $odoo_order_id || empty( $odoo_order_id ) ) {
+                update_post_meta($order_id, 'oodo-status', 'failed');
+                $error_message = 'فشل إرسال الطلب إلى أودو: رد غير متوقع.';
+            } else {
+                $error_message = 'فشل تحديث الطلب في أودو: رد غير متوقع.';
+            }
+            
             $order->add_order_note($error_message, false);
         }
         return false;

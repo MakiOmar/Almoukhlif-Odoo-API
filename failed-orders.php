@@ -38,7 +38,7 @@ function display_odoo_failed_orders_page() {
 	process_odoo_bulk_send_form();
 
 	// Pagination setup
-	$per_page = 10;
+	$per_page = 50;
 	$paged    = isset( $_GET['paged'] ) ? max( 1, intval( $_GET['paged'] ) ) : 1;
 	$offset   = ( $paged - 1 ) * $per_page;
 
