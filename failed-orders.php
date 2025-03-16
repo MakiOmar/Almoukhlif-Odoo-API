@@ -84,6 +84,7 @@ function display_odoo_failed_orders_page() {
 						<th><?php esc_html_e( 'Customer Name', 'text-domain' ); ?></th>
 						<th><?php esc_html_e( 'Total', 'text-domain' ); ?></th>
 						<th><?php esc_html_e( 'Status', 'text-domain' ); ?></th>
+						<th><?php esc_html_e( 'Date', 'text-domain' ); ?></th>
 						<th><?php esc_html_e( 'Actions', 'text-domain' ); ?></th>
 					</tr>
 				</thead>
@@ -102,6 +103,7 @@ function display_odoo_failed_orders_page() {
 								<td><?php echo esc_html( $order_name ); ?></td>
 								<td><?php echo wc_price( $order->get_total() ); ?></td>
 								<td><?php echo esc_html( $status_label ); ?></td>
+								<td><?php echo esc_html( $order->get_date_created()->date('Y-m-d H:i:s') ); ?></td>
 								<td>
 									<a href="<?php echo esc_url( admin_url( 'post.php?post=' . $order->get_id() . '&action=edit' ) ); ?>">
 										<?php esc_html_e( 'View Order', 'text-domain' ); ?>
