@@ -93,13 +93,15 @@ function display_odoo_failed_orders_page() {
 							<?php
 							$order      = wc_get_order( $order_post->ID );
 							$order_name = $order->get_formatted_billing_full_name();
+							$status_key = 'wc-' . $order->get_status();
+							$status_label = isset( $statuses[ $status_key ] ) ? $statuses[ $status_key ] : ucfirst( $order->get_status() );
 							?>
 							<tr>
 								<td><input type="checkbox" name="order_ids[]" value="<?php echo esc_attr( $order->get_id() ); ?>" /></td>
 								<td><?php echo esc_html( $order->get_id() ); ?></td>
 								<td><?php echo esc_html( $order_name ); ?></td>
 								<td><?php echo wc_price( $order->get_total() ); ?></td>
-								<td><?php echo esc_html( ucfirst( get_post_meta( $order->get_id(), 'oodo-status', true ) ) ); ?></td>
+								<td><?php echo esc_html( $status_label ); ?></td>
 								<td>
 									<a href="<?php echo esc_url( admin_url( 'post.php?post=' . $order->get_id() . '&action=edit' ) ); ?>">
 										<?php esc_html_e( 'View Order', 'text-domain' ); ?>
@@ -153,24 +155,28 @@ function add_failed_orders_admin_bar_item( $wp_admin_bar ) {
 		return;
 	}
 
-	// Fetch the count of failed Odoo orders.
+	// Fetch only the count of failed Odoo orders (more efficient)
 	$args = array(
-		'post_type'   => 'shop_order',
-		'post_status' => 'any',
-		'meta_query'  => array(
+		'post_type'      => 'shop_order',
+		'post_status'    => 'any',
+		'meta_query'     => array(
 			array(
 				'key'     => 'oodo-status',
 				'value'   => 'failed',
 				'compare' => '=',
 			),
 		),
-		'fields'      => 'ids',
+		'posts_per_page' => 1,  // No need to fetch all, just get the count
+		'fields'         => 'ids',
 	);
 
-	$orders = get_posts( $args );
-	$count  = count( $orders );
-	$color  = $count > 0 ? 'red' : 'green';
-	// Add a menu item to the admin bar.
+	$query = new WP_Query($args);
+	$count = $query->found_posts; // More efficient than count(get_posts())
+
+	// Set the color of the badge
+	$color = $count > 0 ? 'red' : 'green';
+
+	// Add a menu item to the admin bar
 	$wp_admin_bar->add_node(
 		array(
 			'id'    => 'failed_odoo_orders',
@@ -180,7 +186,7 @@ function add_failed_orders_admin_bar_item( $wp_admin_bar ) {
 				esc_html__( 'Failed Odoo Orders', 'text-domain' ),
 				$count
 			),
-			'href'  => admin_url( 'admin.php?page=odoo-failed-orders' ),
+			'href'  => admin_url( 'admin.php?page=odoo-failed-orders&paged=1' ), // Direct to paginated list
 		)
 	);
 }
