@@ -954,12 +954,6 @@ add_action(
         send_orders_batch_to_odoo(array($order->get_id()));
     }
 );
-add_action(
-    'woocommerce_checkout_phone_order_processed',
-    function ($order_id) {
-        send_orders_batch_to_odoo(array($order_id));
-    }
-);
 
 add_action('woocommerce_order_status_changed', function ($order_id, $old_status, $new_status) {
     update_odoo_order_status(array( $order_id ), $new_status);
