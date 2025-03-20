@@ -173,6 +173,22 @@ function display_all_odoo_missing_status_orders_page() {
 			});
 		</script>
 	</div>
+	<div class="tablenav">
+		<div class="tablenav-pages">
+			<?php
+			echo paginate_links(
+				array(
+					'base'      => add_query_arg( 'paged', '%#%' ),
+					'format'    => '',
+					'prev_text' => __( '&laquo; Previous', 'text-domain' ),
+					'next_text' => __( 'Next &raquo;', 'text-domain' ),
+					'total'     => $total_pages,
+					'current'   => $paged,
+				)
+			);
+			?>
+		</div>
+	</div>
 	<?php
 }
 
