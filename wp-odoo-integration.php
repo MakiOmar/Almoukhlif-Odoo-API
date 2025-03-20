@@ -3,7 +3,7 @@
 /**
  * Plugin Name: WordPress/Odoo Integration
  * Description: Integrates WooCommerce with Odoo to validate stock before adding products to the cart.
- * Version: 1.217
+ * Version: 1.218
  * Author: Mohammad Omar
  *
  * @package Odoo
@@ -525,9 +525,9 @@ function process_odoo_order($order_ids, &$orders_data, &$orders_temp, $update = 
 function process_response($response, $response_data, $orders_temp, $update = false)
 {
     if (function_exists('teamlog')) {
-        teamlog($response);
+        teamlog('Processed response: ' . print_r($response, true));
     } else {
-        error_log($response);
+        error_log('Processed response: ' . print_r($response, true));
     }
     if (is_wp_error($response) || empty($response_data) || ! isset($response_data->result->Code) || 200 !== $response_data->result->Code) {
         foreach ($orders_temp as $order) {
