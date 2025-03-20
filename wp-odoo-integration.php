@@ -3,7 +3,7 @@
 /**
  * Plugin Name: WordPress/Odoo Integration
  * Description: Integrates WooCommerce with Odoo to validate stock before adding products to the cart.
- * Version: 1.216
+ * Version: 1.217
  * Author: Mohammad Omar
  *
  * @package Odoo
@@ -367,6 +367,7 @@ function process_odoo_order($order_ids, &$orders_data, &$orders_temp, $update = 
     foreach ($order_ids as $order_id) {
         $odoo_order = get_post_meta($order_id, 'odoo_order', true);
         if (! empty($odoo_order) && is_numeric($odoo_order) && ! $update) {
+            update_post_meta($order_id, 'oodo-status', 'success');
             continue;
         }
 
@@ -523,14 +524,14 @@ function process_odoo_order($order_ids, &$orders_data, &$orders_temp, $update = 
 }
 function process_response($response, $response_data, $orders_temp, $update = false)
 {
+    if (function_exists('teamlog')) {
+        teamlog($response);
+    } else {
+        error_log($response);
+    }
     if (is_wp_error($response) || empty($response_data) || ! isset($response_data->result->Code) || 200 !== $response_data->result->Code) {
-        if (function_exists('teamlog')) {
-            teamlog('فشل إرسال الطلبات إلى Odoo: رد غير متوقع.');
-        } else {
-            error_log('فشل إرسال الطلبات إلى Odoo: رد غير متوقع.');
-        }
         foreach ($orders_temp as $order) {
-            if (! $update) {
+            if ( ! $update) {
                 update_post_meta($order->get_id(), 'oodo-status', 'failed');
             }
             $error_message = 'فشل إرسال الطلب إلى أودو: رد غير متوقع.';
@@ -546,6 +547,10 @@ function process_response($response, $response_data, $orders_temp, $update = fal
                         if (! $update) {
                             update_post_meta($data->woo_commerce_id, 'oodo-status', 'failed');
                         }
+                    } else {
+                        update_post_meta($data->woo_commerce_id, 'oodo-status', 'success');
+                        update_post_meta($data->woo_commerce_id, 'odoo_order', $data->odoo_id);
+                        update_post_meta($data->woo_commerce_id, 'odoo_order_number', $data->name);
                     }
                     // Add order note with Arabic message if exists.
                     if (isset($data->ArabicMessage)) {
