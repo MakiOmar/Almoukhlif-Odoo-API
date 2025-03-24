@@ -420,21 +420,11 @@ function process_odoo_order($order_ids, &$orders_data, &$orders_temp, $update = 
             'phone'           => $order->get_billing_phone(),
         );
 
-        $missing_fields = array();
-        foreach ($billing_fields as $field => $value) {
-            if (empty($value)) {
-                // $missing_fields[] = ucfirst( str_replace( '_', ' ', $field ) );
-            }
-        }
-
-        if (! empty($missing_fields)) {
-            $missing_fields_text = implode(', ', $missing_fields);
-            update_post_meta($order->get_id(), 'oodo-status', 'failed');
-            $order->add_order_note("لم يتم إرسال الطلب إلى أودو بسبب نقص في بيانات الفوترة: $missing_fields_text.", false);
-            continue; // Skip this order.
-        }
         $order_status  = $order->get_status();
         $orders_temp[] = $order;
+        // Get order billing country
+        $billing_country = $order->get_billing_country();
+        $is_gulf = is_gulf_country( $billing_country );
         $order_data    = array(
             'manual_confirm'  => false,
             'note'            => $order->get_customer_note(),
@@ -443,6 +433,7 @@ function process_odoo_order($order_ids, &$orders_data, &$orders_temp, $update = 
             'order_line'      => array(),
             'payment_method'  => $order->get_payment_method_title(),
             'wc_order_status' => wc_get_order_statuses()["wc-$order_status"],
+            'is_vat_exmpt'    => $is_gulf,
             'created_date'    => $order->get_date_created() ? $order->get_date_created()->date('Y-m-d H:i:s') : null,
         );
         if ($update) {
@@ -454,9 +445,7 @@ function process_odoo_order($order_ids, &$orders_data, &$orders_temp, $update = 
         $items_count = count($line_items);
         $item_discount = $applied_coupons_discount / $items_count;
         $discount       = 0;
-        // Get order billing country
-        $billing_country = $order->get_billing_country();
-        $is_gulf = is_gulf_country( $billing_country );
+        
         foreach ($line_items as $item_id => $item) {
             $product    = $item->get_product();
             $product_id = $product->get_id();
