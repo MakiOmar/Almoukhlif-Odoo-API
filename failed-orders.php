@@ -25,7 +25,7 @@ add_action( 'admin_menu', 'odoo_failed_orders_admin_page' );
  */
 function process_odoo_bulk_send_form() {
 	if ( isset( $_POST['bulk_send_odoo'] ) && ! empty( $_POST['order_ids'] ) ) {
-		send_orders_batch_to_odoo( $_POST['order_ids'] );
+		send_orders_batch_to_odoo( $_POST['order_ids'], false );
 		echo '<div class="updated"><p>' . esc_html__( 'Selected orders have been sent to Odoo.', 'text-domain' ) . '</p></div>';
 	}
 }
@@ -41,11 +41,31 @@ function display_odoo_failed_orders_page() {
 	$per_page = 50;
 	$paged    = isset( $_GET['paged'] ) ? max( 1, intval( $_GET['paged'] ) ) : 1;
 	$offset   = ( $paged - 1 ) * $per_page;
+	// Define statuses that should always be removed from the filter & query.
+	$always_excluded_statuses = array(
+		'wc-user-changed',
+		'wc-refunded',
+		//'wc-pending',
+		'wc-cancel-request',
+		'wc-cancelled',
+		'wc-was-canceled',
+		'wc-completed',
+		'wc-custom-failed',
+		'wc-checkout-draft',
+		'wc-failed',
+	);
 
+	// Get all WooCommerce order statuses.
+	$statuses = wc_get_order_statuses();
+
+	// Remove permanently excluded statuses from the filter options.
+	foreach ( $always_excluded_statuses as $status ) {
+		unset( $statuses[ $status ] );
+	}
 	// Fetch orders with odoo-status set to failed.
 	$args = array(
 		'post_type'      => 'shop_order',
-		'post_status'    => 'any',
+		'post_status'    => array_keys( $statuses ),
 		'meta_query'     => array(
 			array(
 				'key'     => 'oodo-status',
@@ -156,11 +176,30 @@ function add_failed_orders_admin_bar_item( $wp_admin_bar ) {
 	if ( ! current_user_can( 'manage_woocommerce' ) ) {
 		return;
 	}
+	$always_excluded_statuses = array(
+		'wc-user-changed',
+		'wc-refunded',
+		//'wc-pending',
+		'wc-cancel-request',
+		'wc-cancelled',
+		'wc-was-canceled',
+		'wc-completed',
+		'wc-custom-failed',
+		'wc-checkout-draft',
+		'wc-failed',
+	);
 
+	// Get all WooCommerce order statuses.
+	$statuses = wc_get_order_statuses();
+
+	// Remove permanently excluded statuses from the filter options.
+	foreach ( $always_excluded_statuses as $status ) {
+		unset( $statuses[ $status ] );
+	}
 	// Fetch only the count of failed Odoo orders (more efficient)
 	$args = array(
 		'post_type'      => 'shop_order',
-		'post_status'    => 'any',
+		'post_status'    => array_keys( $statuses ),
 		'meta_query'     => array(
 			array(
 				'key'     => 'oodo-status',
