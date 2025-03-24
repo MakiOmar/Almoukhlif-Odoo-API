@@ -3,7 +3,7 @@
 /**
  * Plugin Name: WordPress/Odoo Integration
  * Description: Integrates WooCommerce with Odoo to validate stock before adding products to the cart.
- * Version: 1.220
+ * Version: 1.221
  * Author: Mohammad Omar
  *
  * @package Odoo
