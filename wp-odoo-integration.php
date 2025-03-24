@@ -320,9 +320,6 @@ function item_gifts($item_id, $item, &$order_data, &$discount)
     $order           = wc_get_order($item['order_id']);
     $billing_country = $order ? $order->get_billing_country() : '';
 
-    // List of Gulf countries excluding Saudi Arabia
-    $gulf_countries = array('AE', 'BH', 'KW', 'OM', 'QA'); // UAE, Bahrain, Kuwait, Oman, Qatar
-
     if ($value_unserialized && empty($is_gift)) {
         $counted = count($value_unserialized);
         for ($x = 0; $x < $counted; $x++) {
@@ -343,7 +340,7 @@ function item_gifts($item_id, $item, &$order_data, &$discount)
                 $gifts_total  += $product_price;
 
                 // Check if customer is from a Gulf country (except Saudi Arabia) and adjust price
-                $final_price = in_array($billing_country, $gulf_countries)
+                $final_price = is_gulf_country( $billing_country )
                     ? $product_price
                     : $product_price + ($product_price * 0.15);
 
@@ -361,7 +358,11 @@ function item_gifts($item_id, $item, &$order_data, &$discount)
     }
     return $gifts_total;
 }
-
+function is_gulf_country( $billing_country ){
+    // Define Gulf countries excluding Saudi Arabia
+    $gulf_countries = array('AE', 'BH', 'KW', 'OM', 'QA'); // UAE, Bahrain, Kuwait, Oman, Qatar
+    return in_array($billing_country, $gulf_countries);
+}
 function process_odoo_order($order_ids, &$orders_data, &$orders_temp, $update = false)
 {
     foreach ($order_ids as $order_id) {
@@ -467,8 +468,6 @@ function process_odoo_order($order_ids, &$orders_data, &$orders_temp, $update = 
             // Get order billing country
             $billing_country = $order->get_billing_country();
 
-            // Define Gulf countries excluding Saudi Arabia
-            $gulf_countries = array('AE', 'BH', 'KW', 'OM', 'QA'); // UAE, Bahrain, Kuwait, Oman, Qatar
             // Calculate discount percentage
             $line_subtotal = $item->get_subtotal();
             $line_total = $item->get_total();
@@ -480,7 +479,7 @@ function process_odoo_order($order_ids, &$orders_data, &$orders_temp, $update = 
             $unit_price     = ( $product->get_price() * $item->get_quantity() ) / $quantity;
 
             // Check if the customer is from a Gulf country (except Saudi Arabia) and adjust the price
-            $final_price = in_array($billing_country, $gulf_countries)
+            $final_price = is_gulf_country( $billing_country )
                 ? $unit_price
                 : $unit_price + ($unit_price * 0.15);
             $order_data['order_line'][] = array(
@@ -499,7 +498,7 @@ function process_odoo_order($order_ids, &$orders_data, &$orders_temp, $update = 
         $shipping_cost = $order->get_shipping_total();
         if ($shipping_cost > 0) {
             // Check if 15% should be applied
-            $final_shipping_price = in_array($billing_country, $gulf_countries)
+            $final_shipping_price = is_gulf_country( $billing_country )
                 ? $shipping_cost
                 : $shipping_cost + ($shipping_cost * 0.15);
 
