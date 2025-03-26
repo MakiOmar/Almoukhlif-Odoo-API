@@ -336,9 +336,22 @@ function item_gifts($item_id, $item, &$order_data, &$discount)
 
                 $product_name  = $product->get_name();
                 $product_sku   = $product->get_sku();
+                $multiplier = 1;
+
+                if ($product->is_type('variation')) {
+                    $multiplier = (float) get_post_meta($addon_id[1], '_stock_multiplier', true);
+                    $multiplier = !empty( $multiplier ) && $multiplier > 0 ? $multiplier : 1;
+                }
                 $product_qty   = wc_get_order_item_meta($item_id, '_qty');
-                $product_price = $product->get_price() * $product_qty;
-                $gifts_total  += $product_price;
+
+                $quantity      = $product_qty * $multiplier;
+                if ( $multiplier == 1 ) {
+                    $unit_price = $product->get_price();
+                } else {
+                    $unit_price = $product->get_price() / $quantity;
+                }
+                $product_price = $unit_price;
+                $gifts_total  += $product_price * $quantity;
 
                 // Check if customer is from a Gulf country (except Saudi Arabia) and adjust price
                 $final_price = $is_gulf ? $product_price : $product_price + ($product_price * 0.15);
