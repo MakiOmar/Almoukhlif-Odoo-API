@@ -164,9 +164,67 @@ function register_odoo_update_stock_endpoint() {
 			'permission_callback' => 'odoo_update_stock_permission_check',
 		)
 	);
+	register_rest_route(
+		'odoo/v1',
+		'/set-odoo-status',
+		array(
+			'methods'             => 'POST',
+			'callback'            => 'odoo_update_order_status_endpoint',
+			'permission_callback' => 'odoo_update_stock_permission_check',
+			'args'                => array(
+				'order_id' => array(
+					'required' => true,
+					'type'     => 'integer',
+				),
+				'status'   => array(
+					'required' => true,
+					'type'     => 'string',
+				),
+				'action'   => array(
+					'required' => true,
+					'type'     => 'string',
+					'enum'     => array( 'cancel', 'ship', 'update' ), // نحصرها للثلاثة حالات فقط
+				),
+			),
+		)
+	);
 }
 add_action( 'rest_api_init', 'register_odoo_update_stock_endpoint' );
+function odoo_update_order_status_endpoint( $request ) {
+	$order_id = $request->get_param( 'order_id' );
+	$status   = $request->get_param( 'status' );
+	$action   = $request->get_param( 'action' );
 
+	if ( empty( $order_id ) || empty( $status ) || empty( $action ) ) {
+		return new WP_Error( 'missing_params', 'Missing required parameters.', array( 'status' => 400 ) );
+	}
+
+	// التعامل مع الأكشن المطلوب
+	if ( 'cancel' === $action ) {
+		$odoo_order_id = get_post_meta( $order_id, 'odoo_order', true );
+		if ( $odoo_order_id ) {
+			cancel_odoo_order( $odoo_order_id, $order_id );
+		}
+	}
+
+	if ( 'ship' === $action ) {
+		snks_validate_order_delivery_on_completion( $order_id );
+	}
+
+	if ( 'update' === $action ) {
+		update_odoo_order_status( array( $order_id ), $status );
+	}
+
+	return rest_ensure_response(
+		array(
+			'success'  => true,
+			'message'  => 'WooCommerce has received the updates',
+			'order_id' => $order_id,
+			'status'   => $status,
+			'action'   => $action,
+		)
+	);
+}
 function update_order_meta_handler( $request ) {
 	$order_id          = $request['order_id'];
 	$odoo_order_id     = $request['odoo_order_id'];
