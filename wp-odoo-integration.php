@@ -843,11 +843,11 @@ add_action(
         if ('international-shi' === $new_status || 'was-shipped' === $new_status) {
             snks_validate_order_delivery_on_completion($order_id);
         }
+        update_odoo_order_status(array( $order_id ), $new_status);
     },
     10,
     3 // Number of arguments passed to the callback (order ID, old status, new status).
 );
-
 
 add_filter('woocommerce_add_to_cart_validation', 'odoo_check_stock_before_add_to_cart', 10, 5);
 // Add stock validation during order item addition.
@@ -975,9 +975,6 @@ add_action(
 );
 
 
-add_action('woocommerce_order_status_changed', function ($order_id, $old_status, $new_status) {
-    update_odoo_order_status(array( $order_id ), $new_status);
-}, 10, 3);
 
 add_action(
     'woocommerce_admin_order_data_after_order_details',
