@@ -3,7 +3,7 @@
 /**
  * Plugin Name: WordPress/Odoo Integration
  * Description: Integrates WooCommerce with Odoo to validate stock before adding products to the cart.
- * Version: 1.223
+ * Version: 1.224
  * Author: Mohammad Omar
  *
  * @package Odoo
@@ -938,7 +938,7 @@ add_action(
         }
         ?>
     <tr class="odoo-number">
-        <th><?php _e('رقم أودو:', 'woocommerce-pdf-invoices-packing-slips'); ?></th>
+        <th><?php _e('الرقم المرجعي :', 'woocommerce-pdf-invoices-packing-slips'); ?></th>
         <td><?php echo $odoo; ?></td>
     </tr>
         <?php
