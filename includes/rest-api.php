@@ -209,6 +209,7 @@ function odoo_update_order_status_endpoint( $request ) {
 
 	if ( 'ship' === $action ) {
 		snks_validate_order_delivery_on_completion( $order_id );
+		update_odoo_order_status( array( $order_id ), $status );
 	}
 
 	if ( 'update' === $action ) {
