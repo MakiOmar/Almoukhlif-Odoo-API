@@ -1,62 +1,10 @@
 <?php
-/**
- * Add an admin menu page to display orders with Odoo meta key.
- */
-function odoo_orders_with_meta_admin_page() {
-	add_menu_page(
-		esc_html__( 'Odoo Orders', 'text-domain' ),
-		esc_html__( 'Odoo Orders', 'text-domain' ),
-		'manage_woocommerce',
-		'odoo-orders',
-		'',
-		'dashicons-clipboard',
-		58
-	);
-
-	add_submenu_page(
-		'odoo-orders',
-		esc_html__( 'Sent Orders', 'text-domain' ),
-		esc_html__( 'Sent Orders', 'text-domain' ),
-		'manage_woocommerce',
-		'odoo-orders-with-meta',
-		'display_odoo_orders_with_meta_page'
-	);
-	add_submenu_page(
-		'odoo-orders',
-		esc_html__( 'Orders Without Odoo Status', 'text-domain' ),
-		esc_html__( 'Missing Status Orders', 'text-domain' ),
-		'manage_woocommerce',
-		'odoo-missing-status-orders',
-		'display_odoo_missing_status_orders_page'
-	);
-	add_submenu_page(
-		'odoo-orders',
-		esc_html__( 'All Missing Status Orders', 'text-domain' ),
-		esc_html__( 'All Missing Status Orders', 'text-domain' ),
-		'manage_woocommerce',
-		'all-odoo-missing-status-orders',
-		'display_all_odoo_missing_status_orders_page'
-	);
-
-	add_submenu_page(
-		'odoo-orders',
-		esc_html__( 'Failed Odoo Orders', 'text-domain' ),
-		esc_html__( 'Failed Orders', 'text-domain' ),
-		'manage_woocommerce',
-		'odoo-failed-orders',
-		'display_odoo_failed_orders_page'
-	);
-}
-add_action( 'admin_menu', 'odoo_orders_with_meta_admin_page' );
-
-/**
- * Display the admin page content for orders with `odoo_order` meta key.
- */
+// Admin page for sent Odoo orders (table, pagination)
+if (!function_exists('display_odoo_orders_with_meta_page')) {
 function display_odoo_orders_with_meta_page() {
-    $paged = isset( $_GET['paged'] ) ? max( 1, intval( $_GET['paged'] ) ) : 1;
+    $paged = isset($_GET['paged']) ? max(1, intval($_GET['paged'])) : 1;
     $per_page = 20; // Number of orders per page
-    $offset = ( $paged - 1 ) * $per_page;
-
+    $offset = ($paged - 1) * $per_page;
     $args = array(
         'post_type'   => 'shop_order',
         'post_status' => 'any',
@@ -70,42 +18,41 @@ function display_odoo_orders_with_meta_page() {
         'posts_per_page' => $per_page,
         'offset'         => $offset,
     );
-
-    $orders = get_posts( $args );
-    $total_orders = count( get_posts( array_merge( $args, array( 'posts_per_page' => -1, 'offset' => 0 ) ) ) );
-    $total_pages = ceil( $total_orders / $per_page );
+    $orders = get_posts($args);
+    $total_orders = count(get_posts(array_merge($args, array('posts_per_page' => -1, 'offset' => 0))));
+    $total_pages = ceil($total_orders / $per_page);
     ?>
     <div class="wrap">
-        <h1><?php esc_html_e( 'Orders with Odoo Meta Key', 'text-domain' ); ?></h1>
+        <h1><?php esc_html_e('Orders with Odoo Meta Key', 'text-domain'); ?></h1>
         <table class="widefat fixed" cellspacing="0">
             <thead>
                 <tr>
                     <th><input type="checkbox" id="select_all_meta" /></th>
-                    <th><?php esc_html_e( 'Order ID', 'text-domain' ); ?></th>
-                    <th><?php esc_html_e( 'Customer Name', 'text-domain' ); ?></th>
-                    <th><?php esc_html_e( 'Total', 'text-domain' ); ?></th>
-                    <th><?php esc_html_e( 'Odoo Meta Value', 'text-domain' ); ?></th>
-                    <th><?php esc_html_e( 'Actions', 'text-domain' ); ?></th>
+                    <th><?php esc_html_e('Order ID', 'text-domain'); ?></th>
+                    <th><?php esc_html_e('Customer Name', 'text-domain'); ?></th>
+                    <th><?php esc_html_e('Total', 'text-domain'); ?></th>
+                    <th><?php esc_html_e('Odoo Meta Value', 'text-domain'); ?></th>
+                    <th><?php esc_html_e('Actions', 'text-domain'); ?></th>
                 </tr>
             </thead>
             <tbody>
-                <?php if ( ! empty( $orders ) ) : ?>
-                    <?php foreach ( $orders as $order_post ) : ?>
+                <?php if (!empty($orders)) : ?>
+                    <?php foreach ($orders as $order_post) : ?>
                         <?php
-                        $order      = wc_get_order( $order_post->ID );
+                        $order      = wc_get_order($order_post->ID);
                         $order_id   = $order->get_id();
                         $order_name = $order->get_formatted_billing_full_name();
-                        $odoo_value = get_post_meta( $order_id, 'odoo_order', true );
+                        $odoo_value = get_post_meta($order_id, 'odoo_order', true);
                         ?>
                         <tr>
-                            <td><input type="checkbox" name="order_ids[]" value="<?php echo esc_attr( $order_id ); ?>" /></td>
-                            <td><?php echo esc_html( $order_id ); ?></td>
-                            <td><?php echo esc_html( $order_name ); ?></td>
-                            <td><?php echo wc_price( $order->get_total() ); ?></td>
-                            <td><?php echo esc_html( $odoo_value ); ?></td>
+                            <td><input type="checkbox" name="order_ids[]" value="<?php echo esc_attr($order_id); ?>" /></td>
+                            <td><?php echo esc_html($order_id); ?></td>
+                            <td><?php echo esc_html($order_name); ?></td>
+                            <td><?php echo wc_price($order->get_total()); ?></td>
+                            <td><?php echo esc_html($odoo_value); ?></td>
                             <td>
-                                <a href="<?php echo esc_url( admin_url( 'post.php?post=' . $order_id . '&action=edit' ) ); ?>">
-                                    <?php esc_html_e( 'View Order', 'text-domain' ); ?>
+                                <a href="<?php echo esc_url(admin_url('post.php?post=' . $order_id . '&action=edit')); ?>">
+                                    <?php esc_html_e('View Order', 'text-domain'); ?>
                                 </a>
                             </td>
                         </tr>
@@ -113,7 +60,7 @@ function display_odoo_orders_with_meta_page() {
                 <?php else : ?>
                     <tr>
                         <td colspan="6">
-                            <?php esc_html_e( 'No orders with Odoo meta key found.', 'text-domain' ); ?>
+                            <?php esc_html_e('No orders with Odoo meta key found.', 'text-domain'); ?>
                         </td>
                     </tr>
                 <?php endif; ?>
@@ -121,15 +68,15 @@ function display_odoo_orders_with_meta_page() {
         </table>
         <div class="tablenav">
             <div class="tablenav-pages">
-                <?php if ( $total_pages > 1 ) : ?>
-                    <?php $base_url = admin_url( 'admin.php?page=odoo-orders-with-meta' ); ?>
+                <?php if ($total_pages > 1) : ?>
+                    <?php $base_url = admin_url('admin.php?page=odoo-orders-with-meta'); ?>
                     <span class="pagination-links">
-                        <?php if ( $paged > 1 ) : ?>
-                            <a class="prev-page" href="<?php echo esc_url( add_query_arg( 'paged', $paged - 1, $base_url ) ); ?>">&laquo; Previous</a>
+                        <?php if ($paged > 1) : ?>
+                            <a class="prev-page" href="<?php echo esc_url(add_query_arg('paged', $paged - 1, $base_url)); ?>">&laquo; Previous</a>
                         <?php endif; ?>
-                        <span class="current-page">Page <?php echo esc_html( $paged ); ?> of <?php echo esc_html( $total_pages ); ?></span>
-                        <?php if ( $paged < $total_pages ) : ?>
-                            <a class="next-page" href="<?php echo esc_url( add_query_arg( 'paged', $paged + 1, $base_url ) ); ?>">Next &raquo;</a>
+                        <span class="current-page">Page <?php echo esc_html($paged); ?> of <?php echo esc_html($total_pages); ?></span>
+                        <?php if ($paged < $total_pages) : ?>
+                            <a class="next-page" href="<?php echo esc_url(add_query_arg('paged', $paged + 1, $base_url)); ?>">Next &raquo;</a>
                         <?php endif; ?>
                     </span>
                 <?php endif; ?>
@@ -143,4 +90,5 @@ function display_odoo_orders_with_meta_page() {
         });
     </script>
     <?php
+}
 }

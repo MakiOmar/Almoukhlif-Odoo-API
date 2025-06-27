@@ -42,7 +42,6 @@ wp-odoo-integration/
 ├── utils/                          # Utility functions
 │   ├── class-odoo-helpers.php      # Helper functions
 │   └── class-odoo-logger.php       # Logging functionality
-├── ajax/                           # AJAX handlers
 └── plugin-update-checker/          # Plugin update checker
 ```
 
