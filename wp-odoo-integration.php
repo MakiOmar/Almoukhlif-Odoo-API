@@ -536,50 +536,266 @@ function process_odoo_order($order_ids, &$orders_data, &$orders_temp, $update = 
     }
     teamlog(print_r($orders_data, true));
 }
-function process_response($response, $response_data, $orders_temp, $update = false)
-{
+
+/**
+ * Unified response processor that handles all Odoo API responses consistently
+ * 
+ * @param object $response_data The decoded response from Odoo API
+ * @param array $orders_temp Array of order objects
+ * @param bool $update Whether this is an update operation
+ * @param bool $is_ajax Whether this is an AJAX request
+ * @return array Result with status, message, and processed orders
+ */
+function process_odoo_response_unified($response_data, $orders_temp, $update = false, $is_ajax = false) {
+    $result = [
+        'success' => false,
+        'message' => '',
+        'processed_orders' => [],
+        'failed_orders' => []
+    ];
+
+    // Log the response for debugging
     if (function_exists('teamlog')) {
-        teamlog('Processed response: ' . print_r($response, true));
+        teamlog('Processed response: ' . print_r($response_data, true));
     } else {
-        error_log('Processed response: ' . print_r($response, true));
+        error_log('Processed response: ' . print_r($response_data, true));
     }
-    if (is_wp_error($response) || empty($response_data) || ! isset($response_data->result->Code) || 200 !== $response_data->result->Code) {
-        foreach ($orders_temp as $order) {
-            if ( ! $update) {
+
+    // Check for basic response structure
+    if (empty($response_data) || !isset($response_data->result->Code)) {
+        $result['message'] = 'فشل إرسال الطلب إلى أودو: رد غير متوقع.';
+        $result['failed_orders'] = array_map(function($order) use ($update) {
+            if (!$update) {
                 update_post_meta($order->get_id(), 'oodo-status', 'failed');
             }
-            $error_message = 'فشل إرسال الطلب إلى أودو: رد غير متوقع.';
-            $order->add_order_note($error_message, false);
+            return $order->get_id();
+        }, $orders_temp);
+        return $result;
+    }
+
+    // Check HTTP status code
+    if ($response_data->result->Code !== 200) {
+        $result['message'] = 'فشل إرسال الطلب إلى أودو: رمز الاستجابة ' . $response_data->result->Code;
+        $result['failed_orders'] = array_map(function($order) use ($update) {
+            if (!$update) {
+                update_post_meta($order->get_id(), 'oodo-status', 'failed');
+            }
+            return $order->get_id();
+        }, $orders_temp);
+        return $result;
+    }
+
+    // Process individual order responses
+    if (!isset($response_data->result->Data) || !is_array($response_data->result->Data)) {
+        $result['message'] = 'فشل إرسال الطلب إلى أودو: بيانات الاستجابة غير صحيحة.';
+        $result['failed_orders'] = array_map(function($order) use ($update) {
+            if (!$update) {
+                update_post_meta($order->get_id(), 'oodo-status', 'failed');
+            }
+            return $order->get_id();
+        }, $orders_temp);
+        return $result;
+    }
+
+    $has_failures = false;
+    $success_count = 0;
+
+    foreach ($response_data->result->Data as $data) {
+        $order_id = $data->woo_commerce_id ?? null;
+        
+        if (!$order_id) {
+            continue;
         }
-        return false;
-    } elseif (! empty($response_data) && isset($response_data->result->Code) && 200 === $response_data->result->Code) {
-        // Loop through the response Data array.
-        if (isset($response_data->result->Data) && is_array($response_data->result->Data)) {
-            foreach ($response_data->result->Data as $data) {
-                if (isset($data->ID) && $data->ID === false && isset($data->StatusDescription) && $data->StatusDescription === 'Failed' && isset($data->woo_commerce_id)) {
-                    if (strpos($data->EnglishMessage, 'already exists') === false) {
-                        if (! $update) {
-                            update_post_meta($data->woo_commerce_id, 'oodo-status', 'failed');
-                        }
-                    } else {
-                        update_post_meta($data->woo_commerce_id, 'oodo-status', 'success');
-                        update_post_meta($data->woo_commerce_id, 'odoo_order', $data->odoo_id);
-                        update_post_meta($data->woo_commerce_id, 'odoo_order_number', $data->name);
-                    }
-                    // Add order note with Arabic message if exists.
-                    if (isset($data->ArabicMessage)) {
-                        $order = wc_get_order($data->woo_commerce_id);
-                        if ($order) {
-                            $order->add_order_note($data->ArabicMessage, false);
-                        }
-                    }
-                    return false;
-                }
+
+        $order = wc_get_order($order_id);
+        if (!$order) {
+            continue;
+        }
+
+        // Handle different response scenarios
+        $order_result = process_single_order_response($data, $order, $update);
+        
+        if ($order_result['success']) {
+            $result['processed_orders'][] = $order_id;
+            $success_count++;
+        } else {
+            $result['failed_orders'][] = $order_id;
+            $has_failures = true;
+            
+            // Add order note with specific error message
+            if (isset($data->ArabicMessage)) {
+                $order->add_order_note($data->ArabicMessage, false);
+            } elseif (isset($data->EnglishMessage)) {
+                $order->add_order_note($data->EnglishMessage, false);
             }
         }
     }
-    return true;
+
+    // Set overall result
+    if ($success_count > 0 && !$has_failures) {
+        $result['success'] = true;
+        $result['message'] = "تم إرسال {$success_count} طلب(ات) بنجاح إلى أودو.";
+    } elseif ($success_count > 0 && $has_failures) {
+        $result['success'] = true;
+        $result['message'] = "تم إرسال {$success_count} طلب(ات) بنجاح، وفشل " . count($result['failed_orders']) . " طلب(ات).";
+    } else {
+        $result['message'] = 'فشل إرسال جميع الطلبات إلى أودو.';
+    }
+
+    return $result;
 }
+
+/**
+ * Process response for a single order
+ * 
+ * @param object $data Order response data from Odoo
+ * @param WC_Order $order WooCommerce order object
+ * @param bool $update Whether this is an update operation
+ * @return array Result for this specific order
+ */
+function process_single_order_response($data, $order, $update = false) {
+    $result = ['success' => false, 'message' => ''];
+
+    // Case 1: Order failed in Odoo
+    if (isset($data->ID) && $data->ID === false && 
+        isset($data->StatusDescription) && $data->StatusDescription === 'Failed') {
+        
+        // Special case: "already exists" is treated as success
+        if (isset($data->EnglishMessage) && strpos($data->EnglishMessage, 'already exists') !== false) {
+            if (isset($data->odoo_id) && isset($data->name)) {
+                update_post_meta($order->get_id(), 'odoo_order', $data->odoo_id);
+                update_post_meta($order->get_id(), 'odoo_order_number', $data->name);
+                update_post_meta($order->get_id(), 'oodo-status', 'success');
+                $result['success'] = true;
+                $result['message'] = 'الطلب موجود بالفعل في أودو.';
+            }
+        } else {
+            if (!$update) {
+                update_post_meta($order->get_id(), 'oodo-status', 'failed');
+            }
+            $result['message'] = $data->ArabicMessage ?? $data->EnglishMessage ?? 'فشل في معالجة الطلب في أودو.';
+        }
+        return $result;
+    }
+
+    // Case 2: Order processed successfully
+    if (isset($data->ID) && $data->ID !== false && isset($data->Number)) {
+        if (!$update) {
+            update_post_meta($order->get_id(), 'odoo_order', $data->ID);
+            update_post_meta($order->get_id(), 'odoo_order_number', $data->Number);
+            update_post_meta($order->get_id(), 'oodo-status', 'success');
+        }
+        
+        // Add success note
+        $note_message = $update ? 
+            "تم تحديث الطلب بنجاح في أودو برقم أودو ID: {$data->ID}." :
+            "تم إرسال الطلب بنجاح إلى أودو برقم أودو ID: {$data->ID}.";
+        $order->add_order_note($note_message, false);
+        
+        // Update stock for products
+        update_order_products_stock($order, $update);
+        
+        $result['success'] = true;
+        $result['message'] = 'تم معالجة الطلب بنجاح.';
+        return $result;
+    }
+
+    // Case 3: Invalid response structure
+    if (!isset($data->ID) || !isset($data->woo_commerce_id)) {
+        if (!$update) {
+            update_post_meta($order->get_id(), 'oodo-status', 'failed');
+        }
+        $result['message'] = 'استجابة غير صحيحة من أودو.';
+        return $result;
+    }
+
+    // Case 4: Unknown response format
+    if (!$update) {
+        update_post_meta($order->get_id(), 'oodo-status', 'failed');
+    }
+    $result['message'] = 'تنسيق استجابة غير معروف من أودو.';
+    return $result;
+}
+
+/**
+ * Update stock for all products in an order
+ * 
+ * @param WC_Order $order WooCommerce order object
+ * @param bool $update Whether this is an update operation
+ */
+function update_order_products_stock($order, $update = false) {
+    $sent_products = [];
+    
+    foreach ($order->get_items('line_item') as $item) {
+        $product = $item->get_product();
+        if ($product) {
+            $sent_products[] = $product->get_id();
+            $sku = $product->get_sku();
+            update_odoo_stock($sku, $product);
+        }
+    }
+    
+    if (!empty($sent_products)) {
+        $sent_products_string = implode('-', $sent_products);
+        $note_message = $update ? 
+            "تم تحديث هذه المنتجات في أودو: {$sent_products_string}" :
+            "تم إرسال هذه المنتجات إلى أودو: {$sent_products_string}";
+        $order->add_order_note($note_message, false);
+    }
+}
+
+/**
+ * Handle authentication failure consistently
+ * 
+ * @param array $order_ids Array of order IDs
+ * @param bool $update Whether this is an update operation
+ */
+function handle_authentication_failure($order_ids, $update = false) {
+    foreach ($order_ids as $order_id) {
+        $order = wc_get_order($order_id);
+        if (!$order) continue;
+        
+        $odoo_order_id = get_post_meta($order->get_id(), 'odoo_order', true);
+        
+        if (!$odoo_order_id || empty($odoo_order_id)) {
+            if (!$update) {
+                update_post_meta($order_id, 'oodo-status', 'failed');
+            }
+            $error_message = 'فشل إرسال الطلب إلى أودو: رمز التوثيق غير موجود.';
+        } else {
+            $error_message = 'فشل تحديث الطلب في أودو: رمز التوثيق غير موجود.';
+        }
+        
+        $order->add_order_note($error_message, false);
+    }
+}
+
+/**
+ * Handle retry attempts consistently
+ * 
+ * @param array $order_ids Array of order IDs
+ * @param bool $update Whether this is an update operation
+ * @param int $retry_attempt Current retry attempt
+ * @param string $function_name Name of the function to retry
+ * @return mixed Result from the retry attempt
+ */
+function handle_retry_attempt($order_ids, $update, $retry_attempt, $function_name) {
+    if (function_exists('teamlog')) {
+        teamlog("Retry attempt " . ($retry_attempt + 1) . " for orders: " . implode(', ', $order_ids));
+    }
+    
+    // Exponential backoff with jitter
+    $delay = pow(2, $retry_attempt) + rand(0, 1000) / 1000;
+    sleep($delay);
+    
+    // Recursive call - handle both regular and AJAX functions
+    if ($function_name === 'send_orders_batch_to_odoo_v2') {
+        return send_orders_batch_to_odoo_v2($order_ids, $retry_attempt + 1);
+    } else {
+        return send_orders_batch_to_odoo($order_ids, $update, $retry_attempt + 1);
+    }
+}
+
 function send_to_odoo($orders_data, $token)
 {
     $odoo_api_url = ODOO_BASE . 'api/sale.order/add_update_order';
@@ -600,111 +816,39 @@ function send_to_odoo($orders_data, $token)
 function send_orders_batch_to_odoo($order_ids, $update = false, $retry_attempt = 0)
 {
     if (empty($order_ids) || ! is_array($order_ids)) {
-        return;
+        return [];
     }
 
+    // Authentication check
     $token = get_odoo_auth_token();
-    if (! $token) {
-        if (function_exists('teamlog')) {
-            teamlog('فشل إرسال الطلبات إلى Odoo: رمز التوثيق غير موجود.');
-        } else {
-            error_log('فشل إرسال الطلبات إلى Odoo: رمز التوثيق غير موجود.');
-        }
-        foreach ($order_ids as $order_id) {
-            $order = wc_get_order($order_id);
-            $odoo_order_id =  get_post_meta($order->get_id(), 'odoo_order', true);
-            if ( ! $odoo_order_id || empty( $odoo_order_id ) ) {
-                update_post_meta($order_id, 'oodo-status', 'failed');
-                $error_message = 'فشل إرسال الطلب إلى أودو: رد غير متوقع.';
-            } else {
-                $error_message = 'فشل تحديث الطلب في أودو: رد غير متوقع.';
-            }
-            
-            $order->add_order_note($error_message, false);
-        }
+    if (!$token) {
+        handle_authentication_failure($order_ids, $update);
         return false;
     }
 
+    // Prepare order data
     $orders_data = array();
     $orders_temp = array();
-
     process_odoo_order($order_ids, $orders_data, $orders_temp, $update);
 
     if (empty($orders_data)) {
-        return;
+        return [];
     }
 
+    // Send to Odoo
     $response = send_to_odoo($orders_data, $token);
     $response_body = wp_remote_retrieve_body($response);
     $response_data = json_decode($response_body);
 
-    $resp = process_response($response, $response_data, $orders_temp, $update);
-    if (! $resp) {
-        // Simple retry mechanism - try again up to 3 times
-        if ($retry_attempt < 3) {
-            if (function_exists('teamlog')) {
-                teamlog("Retry attempt " . ($retry_attempt + 1) . " for orders: " . implode(', ', $order_ids));
-            }
-            
-            // Wait a bit before retrying (exponential backoff)
-            $delay = pow(2, $retry_attempt) + rand(0, 1000) / 1000; // 2, 4, 8 seconds + random jitter
-            sleep($delay);
-            
-            // Recursive call with incremented retry attempt
-            return send_orders_batch_to_odoo($order_ids, $update, $retry_attempt + 1);
-        } else {
-            // Max retries reached, mark as failed
-            if (function_exists('teamlog')) {
-                teamlog("Max retries reached for orders: " . implode(', ', $order_ids));
-            }
-            return false;
-        }
+    // Process response using unified processor
+    $result = process_odoo_response_unified($response_data, $orders_temp, $update, false);
+
+    // Handle retries if needed
+    if (!$result['success'] && $retry_attempt < 3) {
+        return handle_retry_attempt($order_ids, $update, $retry_attempt, 'send_orders_batch_to_odoo');
     }
-    $sent_to_odoo = array();
-    foreach ($response_data->result->Data as $odoo_order) {
-        if ($odoo_order->woo_commerce_id) {
-            $order_id = $odoo_order->woo_commerce_id;
-            if (! $update) {
-                update_post_meta($order_id, 'odoo_order', $odoo_order->ID);
-                update_post_meta($order_id, 'odoo_order_number', $odoo_order->Number);
-                update_post_meta($order_id, 'oodo-status', 'success');
-            }
-            $sent_to_odoo[] = $order_id;
-            $order          = wc_get_order($order_id);
-            if ($order) {
-                if (! $update) {
-                    $order->add_order_note("تم إرسال الطلب بنجاح إلى أودو برقم أودو ID: {$odoo_order->ID}.", false);
-                } else {
-                    $order->add_order_note("تم تحديث الطلب بنجاح إلى أودو برقم أودو ID: {$odoo_order->ID}.", false);
-                }
-                $sent_products = array();
-                foreach ($order->get_items('line_item') as $item) {
-                    $product = $item->get_product();
-                    if ($product) {
-                        $sent_products[] = $product->get_id();
-                        $sku             = $product->get_sku();
-                        update_odoo_stock($sku, $product);
-                    }
-                }
-                $sent_products_string = implode('-', $sent_products);
-                if (! $update) {
-                    $order->add_order_note("تم إرسال هذه المنتجات إلى أودو {$sent_products_string}", false);
-                } else {
-                    $order->add_order_note("تم تحديث هذه المنتجات إلى أودو {$sent_products_string}", false);
-                }
-            } else {
-                teamlog('Order not found');
-            }
-        } else {
-            teamlog(
-                array(
-                    'error'    => 'No woo_commerce_id',
-                    'response' => $odoo_order,
-                )
-            );
-        }
-    }
-    return $sent_to_odoo;
+
+    return $result['processed_orders'];
 }
 
 
@@ -1055,99 +1199,42 @@ function send_orders_batch_to_odoo_v2($order_ids, $retry_attempt = 0)
         return wp_send_json_error(array('message' => 'No order IDs provided.'));
     }
 
+    // Authentication check
     $token = get_odoo_auth_token();
-    if (! $token) {
+    if (!$token) {
         $error_message = 'فشل إرسال الطلبات إلى Odoo: رمز التوثيق غير موجود.';
-        foreach ($order_ids as $order_id) {
-            $order = wc_get_order($order_id);
-            update_post_meta($order_id, 'oodo-status', 'failed');
-            $order->add_order_note($error_message, false);
-        }
+        handle_authentication_failure($order_ids, false);
         return wp_send_json_error($error_message);
     }
 
+    // Prepare order data
     $orders_data = array();
     $orders_temp = array();
-
-    process_odoo_order($order_ids, $orders_data, $orders_temp);
+    process_odoo_order($order_ids, $orders_data, $orders_temp, false);
 
     if (empty($orders_data)) {
         return wp_send_json_error(array('message' => 'No valid orders to send.'));
     }
 
+    // Send to Odoo
     $response = send_to_odoo($orders_data, $token);
-
     $response_body = wp_remote_retrieve_body($response);
     $response_data = json_decode($response_body);
-    if (is_wp_error($response) || empty($response_data) || ! isset($response_data->result->Code) || 200 !== $response_data->result->Code) {
-        // Simple retry mechanism - try again up to 3 times
-        if ($retry_attempt < 3) {
-            if (function_exists('teamlog')) {
-                teamlog("AJAX retry attempt " . ($retry_attempt + 1) . " for orders: " . implode(', ', $order_ids));
-            }
-            
-            // Wait a bit before retrying (exponential backoff)
-            $delay = pow(2, $retry_attempt) + rand(0, 1000) / 1000; // 2, 4, 8 seconds + random jitter
-            sleep($delay);
-            
-            // Recursive call with incremented retry attempt
-            return send_orders_batch_to_odoo_v2($order_ids, $retry_attempt + 1);
-        } else {
-            // Max retries reached, mark as failed
-            if (function_exists('teamlog')) {
-                teamlog("AJAX max retries reached for orders: " . implode(', ', $order_ids));
-            }
-            $error_message = 'فشل إرسال الطلبات إلى Odoo: رد غير متوقع.';
-            foreach ($orders_temp as $order) {
-                update_post_meta($order->get_id(), 'oodo-status', 'failed');
-                $order->add_order_note($error_message, false);
-            }
-            return wp_send_json_error($error_message);
-        }
-    } elseif (! empty($response_data) && isset($response_data->result->Code) && 200 === $response_data->result->Code) {
-        // Loop through the response Data array
-        if (isset($response_data->result->Data) && is_array($response_data->result->Data)) {
-            foreach ($response_data->result->Data as $data) {
-                if (isset($data->ID) && $data->ID === false && isset($data->StatusDescription) && $data->StatusDescription === 'Failed' && isset($data->woo_commerce_id)) {
-                    if (strpos($data->EnglishMessage, 'already exists') === false) {
-                        update_post_meta($data->woo_commerce_id, 'oodo-status', 'failed');
-                    }
-                    // Add order note with Arabic message if exists
-                    if (isset($data->ArabicMessage)) {
-                        $order = wc_get_order($data->woo_commerce_id);
-                        if ($order) {
-                            $order->add_order_note($data->ArabicMessage, false);
-                        }
-                    }
-                    return wp_send_json_error(array('message' => $data->ArabicMessage ?? 'Order failed to send.'));
-                } elseif (! isset($data->ID) || $data->ID === false || ! isset($data->woo_commerce_id)) {
-                    return wp_send_json_error(array('message' => $data->ArabicMessage ?? 'Order failed to send.'));
-                }
-            }
-        }
+
+    // Process response using unified processor
+    $result = process_odoo_response_unified($response_data, $orders_temp, false, true);
+
+    // Handle retries if needed
+    if (!$result['success'] && $retry_attempt < 3) {
+        return handle_retry_attempt($order_ids, false, $retry_attempt, 'send_orders_batch_to_odoo_v2');
     }
 
-    foreach ($response_data->result->Data as $odoo_order) {
-        if ($odoo_order->woo_commerce_id) {
-            $order_id = $odoo_order->woo_commerce_id;
-            update_post_meta($order_id, 'odoo_order', $odoo_order->ID);
-            update_post_meta($order_id, 'odoo_order_number', $odoo_order->Number);
-            update_post_meta($order_id, 'oodo-status', 'success');
-            $order = wc_get_order($order_id);
-            if ($order) {
-                $order->add_order_note("تم إرسال الطلب بنجاح إلى أودو برقم أودو ID: {$odoo_order->ID}.", false);
-                foreach ($order->get_items('line_item') as $item) {
-                    $product = $item->get_product();
-                    if ($product) {
-                        $sku = $product->get_sku();
-                        update_odoo_stock($sku, $product);
-                    }
-                }
-            }
-        }
+    // Return appropriate JSON response
+    if ($result['success']) {
+        return wp_send_json_success(array('message' => $result['message']));
+    } else {
+        return wp_send_json_error(array('message' => $result['message']));
     }
-
-    return wp_send_json_success(array('message' => 'Orders sent to Odoo successfully.'));
 }
 
 add_action(
