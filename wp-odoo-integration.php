@@ -69,7 +69,7 @@ function odoo_get_total_coupon_discount($applied_coupons)
  *
  * @return string|false The authentication token, or false on failure.
  */
-function get_odoo_auth_token()
+function get_odoo_auth_token($retry_attempt = 0)
 {
     $transient_key = 'odoo_auth_token';
     $token         = get_transient($transient_key);
@@ -108,6 +108,25 @@ function get_odoo_auth_token()
                 $token = $auth_data->result->token;
                 set_transient($transient_key, $token, DAY_IN_SECONDS);
                 return $token;
+            }
+        } else {
+            // Simple retry mechanism for authentication - try again up to 2 times
+            if ($retry_attempt < 2) {
+                if (function_exists('teamlog')) {
+                    teamlog("Auth retry attempt " . ($retry_attempt + 1) . ": " . $auth_response->get_error_message());
+                }
+                
+                // Wait a bit before retrying
+                $delay = pow(2, $retry_attempt) + rand(0, 1000) / 1000; // 2, 4 seconds + random jitter
+                sleep($delay);
+                
+                // Recursive call with incremented retry attempt
+                return get_odoo_auth_token($retry_attempt + 1);
+            } else {
+                // Max retries reached
+                if (function_exists('teamlog')) {
+                    teamlog("Auth max retries reached: " . $auth_response->get_error_message());
+                }
             }
         }
     }
@@ -578,7 +597,7 @@ function send_to_odoo($orders_data, $token)
         )
     );
 }
-function send_orders_batch_to_odoo($order_ids, $update = false)
+function send_orders_batch_to_odoo($order_ids, $update = false, $retry_attempt = 0)
 {
     if (empty($order_ids) || ! is_array($order_ids)) {
         return;
@@ -621,7 +640,25 @@ function send_orders_batch_to_odoo($order_ids, $update = false)
 
     $resp = process_response($response, $response_data, $orders_temp, $update);
     if (! $resp) {
-        return;
+        // Simple retry mechanism - try again up to 3 times
+        if ($retry_attempt < 3) {
+            if (function_exists('teamlog')) {
+                teamlog("Retry attempt " . ($retry_attempt + 1) . " for orders: " . implode(', ', $order_ids));
+            }
+            
+            // Wait a bit before retrying (exponential backoff)
+            $delay = pow(2, $retry_attempt) + rand(0, 1000) / 1000; // 2, 4, 8 seconds + random jitter
+            sleep($delay);
+            
+            // Recursive call with incremented retry attempt
+            return send_orders_batch_to_odoo($order_ids, $update, $retry_attempt + 1);
+        } else {
+            // Max retries reached, mark as failed
+            if (function_exists('teamlog')) {
+                teamlog("Max retries reached for orders: " . implode(', ', $order_ids));
+            }
+            return false;
+        }
     }
     $sent_to_odoo = array();
     foreach ($response_data->result->Data as $odoo_order) {
@@ -833,14 +870,14 @@ add_action(
     'woocommerce_order_status_changed',
     function ($order_id, $old_status, $new_status) {
         // Check if the new status is 'cancelled'.
-        if ('cancelled' === $new_status || 'was-canceled' === $new_status || 'wc-cancelled' === $new_status) {
+        if ('cancelled' === $new_status || 'was-canceled' === $new_status || 'wc-cancelled' === $new_status || 'custom-failed' === $new_status || 'failed' === $new_status) {
             $odoo_order_id = get_post_meta($order_id, 'odoo_order', true);
             if ($odoo_order_id) {
                 cancel_odoo_order($odoo_order_id, $order_id);
             }
         }
 
-        if ('international-shi' === $new_status || 'was-shipped' === $new_status) {
+        if ('international-shi' === $new_status || 'was-shipped' === $new_status || 'received' === $new_status) {
             snks_validate_order_delivery_on_completion($order_id);
         }
         update_odoo_order_status(array( $order_id ), $new_status);
@@ -1012,7 +1049,7 @@ add_action(
     }
 );
 
-function send_orders_batch_to_odoo_v2($order_ids)
+function send_orders_batch_to_odoo_v2($order_ids, $retry_attempt = 0)
 {
     if (empty($order_ids) || ! is_array($order_ids)) {
         return wp_send_json_error(array('message' => 'No order IDs provided.'));
@@ -1043,12 +1080,30 @@ function send_orders_batch_to_odoo_v2($order_ids)
     $response_body = wp_remote_retrieve_body($response);
     $response_data = json_decode($response_body);
     if (is_wp_error($response) || empty($response_data) || ! isset($response_data->result->Code) || 200 !== $response_data->result->Code) {
-        $error_message = 'فشل إرسال الطلبات إلى Odoo: رد غير متوقع.';
-        foreach ($orders_temp as $order) {
-            update_post_meta($order->get_id(), 'oodo-status', 'failed');
-            $order->add_order_note($error_message, false);
+        // Simple retry mechanism - try again up to 3 times
+        if ($retry_attempt < 3) {
+            if (function_exists('teamlog')) {
+                teamlog("AJAX retry attempt " . ($retry_attempt + 1) . " for orders: " . implode(', ', $order_ids));
+            }
+            
+            // Wait a bit before retrying (exponential backoff)
+            $delay = pow(2, $retry_attempt) + rand(0, 1000) / 1000; // 2, 4, 8 seconds + random jitter
+            sleep($delay);
+            
+            // Recursive call with incremented retry attempt
+            return send_orders_batch_to_odoo_v2($order_ids, $retry_attempt + 1);
+        } else {
+            // Max retries reached, mark as failed
+            if (function_exists('teamlog')) {
+                teamlog("AJAX max retries reached for orders: " . implode(', ', $order_ids));
+            }
+            $error_message = 'فشل إرسال الطلبات إلى Odoo: رد غير متوقع.';
+            foreach ($orders_temp as $order) {
+                update_post_meta($order->get_id(), 'oodo-status', 'failed');
+                $order->add_order_note($error_message, false);
+            }
+            return wp_send_json_error($error_message);
         }
-        return wp_send_json_error($error_message);
     } elseif (! empty($response_data) && isset($response_data->result->Code) && 200 === $response_data->result->Code) {
         // Loop through the response Data array
         if (isset($response_data->result->Data) && is_array($response_data->result->Data)) {
