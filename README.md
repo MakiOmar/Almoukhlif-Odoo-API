@@ -95,10 +95,13 @@ The plugin requires the following Odoo settings to be configured:
 The plugin provides a comprehensive admin interface with:
 
 - **Sent Orders**: View all successfully sent orders
-- **Failed Orders**: Monitor and retry failed orders
-- **Not Sent Orders**: View orders that haven't been sent yet
+- **Failed Orders**: Monitor and retry failed orders with advanced filtration
+- **Not Sent Orders**: View orders that haven't been sent yet with advanced filtration
+- **All Missing Status Orders**: Comprehensive view with date range and status filters
 - **Bulk Operations**: Send multiple orders at once
 - **Real-time Notifications**: Admin bar notifications for failed orders
+- **Advanced Filtration**: Date range, order status, customer search, and order ID filters
+- **Cached Counts**: 5-minute cache for admin bar counts to reduce server load
 
 ## 🚨 Odoo Status Failures & Order Notes
 
