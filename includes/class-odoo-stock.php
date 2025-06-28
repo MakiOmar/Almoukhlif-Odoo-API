@@ -85,17 +85,7 @@ class Odoo_Stock {
         $stock_body_response = wp_remote_retrieve_body($stock_response);
         $stock_data = json_decode($stock_body_response);
 
-        // Debug logging
-        if (function_exists('teamlog')) {
-            teamlog("Stock check for SKU: $sku, Quantity: $quantity, Product ID: $product_id");
-            teamlog("Stock response: " . $stock_body_response);
-        }
-
         if (!isset($stock_data->result->Data) || !is_array($stock_data->result->Data)) {
-            if (function_exists('teamlog')) {
-                teamlog("Stock data error - missing result.Data or not array");
-                teamlog("Stock data structure: " . print_r($stock_data, true));
-            }
             return new WP_Error('stock_data_error', $message);
         }
 
@@ -126,18 +116,6 @@ class Odoo_Stock {
         }
 
         $adjusted_quantity = $quantity * $multiplier;
-        
-        // Detailed debug logging
-        if (function_exists('teamlog')) {
-            teamlog("=== STOCK CHECK DETAILS ===");
-            teamlog("Original quantity requested: $quantity");
-            teamlog("Stock multiplier found: $multiplier");
-            teamlog("Adjusted quantity after multiplier: $adjusted_quantity");
-            teamlog("Total stock from Odoo: $total_stock");
-            teamlog("Stock comparison: $adjusted_quantity <= $total_stock");
-            teamlog("Stock check result: " . ($total_stock >= $adjusted_quantity ? 'SUCCESS' : 'FAILED'));
-            teamlog("========================");
-        }
         
         // Return stock availability.
         return $total_stock >= $adjusted_quantity;
