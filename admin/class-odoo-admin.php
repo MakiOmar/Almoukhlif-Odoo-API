@@ -13,6 +13,9 @@ class Odoo_Admin {
      * Initialize admin functionality
      */
     public static function init() {
+        // Load admin includes
+        require_once plugin_dir_path(__FILE__) . 'includes/class-odoo-filters.php';
+        
         add_action('admin_menu', array(__CLASS__, 'add_admin_menu'));
         add_action('admin_bar_menu', array(__CLASS__, 'add_admin_bar_items'), 100);
         

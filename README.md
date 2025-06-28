@@ -29,6 +29,8 @@ wp-odoo-integration/
 │   └── rest-api.php                # REST API integration
 ├── admin/                          # Admin interface
 │   ├── class-odoo-admin.php        # Admin menu and pages
+│   ├── includes/                   # Admin includes
+│   │   └── class-odoo-filters.php  # Reusable filtration system
 │   ├── pages/                      # Admin page files
 │   │   ├── sent-orders.php         # Sent orders page
 │   │   ├── failed-orders.php       # Failed orders page
@@ -59,6 +61,7 @@ wp-odoo-integration/
 ### Admin Classes
 
 - **`Odoo_Admin`**: Admin menu and page management
+- **`Odoo_Admin_Filters`**: Reusable filtration system for admin pages
 - **`Odoo_Hooks`**: WordPress hooks and actions
 
 ### Utility Classes

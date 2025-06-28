@@ -20,14 +20,10 @@ function display_all_odoo_missing_status_orders_page() {
         $date_query['before'] = $to_date;
     }
     $date_query['inclusive'] = true;
-    if (isset($_POST['bulk_send_odoo']) && !empty($_POST['order_ids'])) {
-        send_orders_batch_to_odoo($_POST['order_ids']);
-        // Clear admin bar cache after bulk operation
-        if (class_exists('Odoo_Admin')) {
-            Odoo_Admin::clear_cache();
-        }
-        echo '<div class="updated"><p>' . esc_html__('Selected orders have been sent to Odoo.', 'text-domain') . '</p></div>';
-    }
+    
+    // Process bulk action
+    Odoo_Admin_Filters::process_bulk_action('bulk_send_odoo', $_POST['order_ids'] ?? array(), false);
+    
     $args = array(
         'post_type'      => 'shop_order',
         'post_status'    => array_diff(array_keys($statuses), $excluded_statuses),

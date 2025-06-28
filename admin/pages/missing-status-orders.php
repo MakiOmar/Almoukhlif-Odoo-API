@@ -2,91 +2,38 @@
 // Admin page for orders missing Odoo status (table, pagination, filters)
 if (!function_exists('display_odoo_missing_status_orders_page')) {
 function display_odoo_missing_status_orders_page() {
-    // Process form submission.
-    if (isset($_POST['bulk_send_odoo']) && !empty($_POST['order_ids'])) {
-        send_orders_batch_to_odoo($_POST['order_ids'], false);
-        // Clear admin bar cache after bulk operation
-        if (class_exists('Odoo_Admin')) {
-            Odoo_Admin::clear_cache();
-        }
-        echo '<div class="updated"><p>' . esc_html__('Selected orders have been sent to Odoo.', 'text-domain') . '</p></div>';
-    }
+    // Process bulk action
+    Odoo_Admin_Filters::process_bulk_action('bulk_send_odoo', $_POST['order_ids'] ?? array(), false);
     
     // Get filter parameters
+    $filters = Odoo_Admin_Filters::get_filter_params();
     $orders_per_page = 50;
-    $paged = isset($_GET['paged']) ? max(1, intval($_GET['paged'])) : 1;
-    $from_date = isset($_GET['from_date']) ? sanitize_text_field($_GET['from_date']) : '';
-    $to_date = isset($_GET['to_date']) ? sanitize_text_field($_GET['to_date']) : '';
-    $order_status = isset($_GET['order_status']) ? sanitize_text_field($_GET['order_status']) : '';
-    $customer_search = isset($_GET['customer_search']) ? sanitize_text_field($_GET['customer_search']) : '';
-    $order_id_search = isset($_GET['order_id_search']) ? sanitize_text_field($_GET['order_id_search']) : '';
     
     // Get available statuses
     $available_statuses = array('wc-processing', 'wc-on-hold', 'wc-custom-status');
     
-    // Build query args
-    $args = array(
+    // Build base query args
+    $base_args = array(
         'post_type' => 'shop_order',
         'post_status' => $available_statuses,
         'orderby' => 'date',
         'order' => 'DESC',
         'posts_per_page' => $orders_per_page,
-        'paged' => $paged,
+        'paged' => $filters['paged'],
         'meta_query' => array([
             'key' => 'oodo-status',
             'compare' => 'NOT EXISTS',
         ]),
     );
     
-    // Add date filters
-    if (!empty($from_date) || !empty($to_date)) {
-        $args['date_query'] = array();
-        if (!empty($from_date)) {
-            $args['date_query']['after'] = $from_date;
-        }
-        if (!empty($to_date)) {
-            $args['date_query']['before'] = $to_date;
-        }
-        $args['date_query']['inclusive'] = true;
-    } else {
-        // Default date filter (after 2025-02-17)
-        $args['date_query'] = array([
-            'after' => '2025-02-17',
-            'inclusive' => true,
-        ]);
-    }
+    // Default date filter (after 2025-02-17)
+    $default_date_filter = array([
+        'after' => '2025-02-17',
+        'inclusive' => true,
+    ]);
     
-    // Add order status filter
-    if (!empty($order_status)) {
-        $args['post_status'] = array($order_status);
-    }
-    
-    // Add customer search
-    if (!empty($customer_search)) {
-        $args['meta_query'][] = array(
-            'relation' => 'OR',
-            array(
-                'key' => '_billing_first_name',
-                'value' => $customer_search,
-                'compare' => 'LIKE'
-            ),
-            array(
-                'key' => '_billing_last_name',
-                'value' => $customer_search,
-                'compare' => 'LIKE'
-            ),
-            array(
-                'key' => '_billing_email',
-                'value' => $customer_search,
-                'compare' => 'LIKE'
-            )
-        );
-    }
-    
-    // Add order ID search
-    if (!empty($order_id_search)) {
-        $args['post__in'] = array(intval($order_id_search));
-    }
+    // Apply filters
+    $args = Odoo_Admin_Filters::build_query_args($base_args, $filters, $default_date_filter);
     
     $orders_query = new WP_Query($args);
     $orders = $orders_query->posts;
@@ -97,55 +44,17 @@ function display_odoo_missing_status_orders_page() {
         <h1><?php esc_html_e('Orders Without Odoo Status', 'text-domain'); ?></h1>
         
         <!-- Filters Form -->
-        <form method="GET" style="margin-bottom: 20px; padding: 15px; background: #fff; border: 1px solid #ccd0d4; border-radius: 4px;">
-            <input type="hidden" name="page" value="<?php echo esc_attr($_GET['page']); ?>">
-            
-            <div style="display: flex; flex-wrap: wrap; gap: 15px; align-items: end;">
-                <div>
-                    <label style="display: block; margin-bottom: 5px; font-weight: bold;"><?php esc_html_e('Date Range:', 'text-domain'); ?></label>
-                    <div style="display: flex; gap: 10px;">
-                        <input type="date" name="from_date" value="<?php echo esc_attr($from_date); ?>" placeholder="<?php esc_attr_e('From Date', 'text-domain'); ?>">
-                        <input type="date" name="to_date" value="<?php echo esc_attr($to_date); ?>" placeholder="<?php esc_attr_e('To Date', 'text-domain'); ?>">
-                    </div>
-                </div>
-                
-                <div>
-                    <label style="display: block; margin-bottom: 5px; font-weight: bold;"><?php esc_html_e('Order Status:', 'text-domain'); ?></label>
-                    <select name="order_status" style="min-width: 150px;">
-                        <option value=""><?php esc_html_e('All Statuses', 'text-domain'); ?></option>
-                        <?php 
-                        $statuses = wc_get_order_statuses();
-                        foreach ($available_statuses as $status) : 
-                            $status_label = isset($statuses[$status]) ? $statuses[$status] : ucfirst(str_replace('wc-', '', $status));
-                        ?>
-                            <option value="<?php echo esc_attr($status); ?>" <?php selected($order_status, $status); ?>>
-                                <?php echo esc_html($status_label); ?>
-                            </option>
-                        <?php endforeach; ?>
-                    </select>
-                </div>
-                
-                <div>
-                    <label style="display: block; margin-bottom: 5px; font-weight: bold;"><?php esc_html_e('Customer Search:', 'text-domain'); ?></label>
-                    <input type="text" name="customer_search" value="<?php echo esc_attr($customer_search); ?>" placeholder="<?php esc_attr_e('Name or Email', 'text-domain'); ?>" style="min-width: 200px;">
-                </div>
-                
-                <div>
-                    <label style="display: block; margin-bottom: 5px; font-weight: bold;"><?php esc_html_e('Order ID:', 'text-domain'); ?></label>
-                    <input type="number" name="order_id_search" value="<?php echo esc_attr($order_id_search); ?>" placeholder="<?php esc_attr_e('Order ID', 'text-domain'); ?>" style="min-width: 100px;">
-                </div>
-                
-                <div>
-                    <button type="submit" class="button button-primary"><?php esc_html_e('Apply Filters', 'text-domain'); ?></button>
-                    <a href="<?php echo esc_url(admin_url('admin.php?page=odoo-missing-status-orders')); ?>" class="button"><?php esc_html_e('Clear Filters', 'text-domain'); ?></a>
-                </div>
-            </div>
-        </form>
+        <?php 
+        $statuses = wc_get_order_statuses();
+        $filter_statuses = array();
+        foreach ($available_statuses as $status) {
+            $filter_statuses[$status] = isset($statuses[$status]) ? $statuses[$status] : ucfirst(str_replace('wc-', '', $status));
+        }
+        Odoo_Admin_Filters::render_filters_form($filters, $filter_statuses, 'odoo-missing-status-orders'); 
+        ?>
         
         <!-- Results Summary -->
-        <div style="margin-bottom: 15px;">
-            <p><strong><?php esc_html_e('Total Orders Found:', 'text-domain'); ?></strong> <?php echo esc_html($total_orders); ?></p>
-        </div>
+        <?php Odoo_Admin_Filters::render_results_summary($total_orders); ?>
         
         <form method="post">
             <table class="widefat fixed" cellspacing="0">
@@ -207,18 +116,13 @@ function display_odoo_missing_status_orders_page() {
                     'prev_text' => __('&laquo; Previous', 'text-domain'),
                     'next_text' => __('Next &raquo;', 'text-domain'),
                     'total' => $total_pages,
-                    'current' => $paged,
+                    'current' => $filters['paged'],
                 ));
                 ?>
             </div>
         </div>
     </div>
-    <script>
-        document.getElementById('select_all').addEventListener('click', function() {
-            const checkboxes = document.querySelectorAll('input[name="order_ids[]"]');
-            checkboxes.forEach(checkbox => checkbox.checked = this.checked);
-        });
-    </script>
+    <?php Odoo_Admin_Filters::render_select_all_js(); ?>
     <?php
 }
 } 
