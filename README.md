@@ -190,6 +190,113 @@ The plugin includes robust error handling:
 - **User Notifications**: Clear error messages for users
 - **Admin Monitoring**: Easy monitoring of failed operations
 
+## 🔄 API Retry Mechanism
+
+The plugin implements a sophisticated retry mechanism with exponential backoff to handle temporary network issues and API failures. Here's when retries occur and how they work:
+
+### **When Retries Are Triggered**
+
+#### **1. Order Processing Failures**
+- **Trigger**: When sending orders to Odoo API fails (HTTP errors, network timeouts, invalid responses)
+- **Retry Limit**: Up to 3 attempts per order batch
+- **Retry Function**: `send_batch()` and `send_batch_ajax()`
+- **Conditions**: 
+  - HTTP status codes other than 200
+  - Network connection errors
+  - Invalid response structure from Odoo
+  - Missing required response data
+
+#### **2. Authentication Failures**
+- **Trigger**: When Odoo authentication token retrieval fails
+- **Retry Limit**: Up to 2 attempts for authentication
+- **Retry Function**: `get_auth_token()`
+- **Conditions**:
+  - Network connection errors during authentication
+  - Odoo authentication service temporarily unavailable
+  - Invalid credentials (though this won't be retried)
+
+### **Retry Strategy**
+
+#### **Exponential Backoff with Jitter**
+The plugin uses exponential backoff with random jitter to prevent thundering herd problems:
+
+```php
+$delay = pow(2, $retry_attempt) + rand(0, 1000) / 1000;
+```
+
+**Retry Delays:**
+- **1st Retry**: ~2-3 seconds (2 + 0-1 second jitter)
+- **2nd Retry**: ~4-5 seconds (4 + 0-1 second jitter)  
+- **3rd Retry**: ~8-9 seconds (8 + 0-1 second jitter)
+
+#### **Authentication Retry Delays:**
+- **1st Retry**: ~2-3 seconds
+- **2nd Retry**: ~4-5 seconds
+
+### **What Happens During Retries**
+
+#### **Order Processing Retries:**
+1. **Logging**: Each retry attempt is logged with order IDs and attempt number
+2. **Delay**: System waits using exponential backoff
+3. **Re-authentication**: Fresh authentication token is obtained
+4. **Re-processing**: Order data is re-sent to Odoo API
+5. **Response Handling**: Same response processing logic is applied
+
+#### **Authentication Retries:**
+1. **Logging**: Authentication retry attempts are logged
+2. **Delay**: System waits using exponential backoff
+3. **Re-attempt**: Authentication request is re-sent
+4. **Token Storage**: Successful token is cached for 24 hours
+
+### **Retry Success Conditions**
+
+#### **Order Processing:**
+- **Success**: Odoo API returns HTTP 200 with valid response structure
+- **Partial Success**: Some orders succeed, others fail (handled individually)
+- **Failure**: All retry attempts exhausted, orders marked as failed
+
+#### **Authentication:**
+- **Success**: Valid authentication token received and stored
+- **Failure**: All retry attempts exhausted, authentication fails
+
+### **What Doesn't Trigger Retries**
+
+#### **Permanent Failures (No Retry):**
+- **Invalid Credentials**: Wrong username/password
+- **Invalid Order Data**: Malformed order structure
+- **Odoo Processing Errors**: Orders rejected by Odoo business logic
+- **Already Existing Orders**: Orders that already exist in Odoo
+- **Authentication Token Expired**: Token cleared and re-authentication attempted
+
+#### **Manual Retry Options:**
+- **Admin Interface**: Failed orders can be manually retried from admin pages
+- **Bulk Actions**: Multiple failed orders can be retried at once
+- **Individual Retry**: Single orders can be retried from order edit page
+
+### **Monitoring Retries**
+
+#### **Logging:**
+- **Function**: `teamlog()` if available, otherwise `error_log()`
+- **Information**: Retry attempt number, order IDs, error messages
+- **Location**: Server error logs or custom logging system
+
+#### **Admin Interface:**
+- **Failed Orders Page**: Shows orders that failed after all retry attempts
+- **Real-time Counts**: Admin bar shows count of failed orders
+- **Retry Actions**: Manual retry buttons for failed orders
+
+### **Performance Considerations**
+
+#### **Retry Impact:**
+- **Processing Time**: Each retry adds delay to order processing
+- **Server Load**: Exponential backoff prevents overwhelming Odoo API
+- **User Experience**: Orders may take longer to sync during retry attempts
+
+#### **Optimization:**
+- **Token Caching**: Authentication tokens cached for 24 hours
+- **Batch Processing**: Multiple orders sent in single API call
+- **Jitter**: Random delays prevent synchronized retry attempts
+
 ## 🔄 Backward Compatibility
 
 The plugin maintains backward compatibility through function aliases, ensuring existing integrations continue to work.
