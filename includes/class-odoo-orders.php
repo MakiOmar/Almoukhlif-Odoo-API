@@ -48,6 +48,7 @@ class Odoo_Orders {
 
         // Handle retries if needed
         if (!$result['success'] && $retry_attempt < 3) {
+            teamlog("Retry attempt for response: " . print_r($response_data, true));
             return self::handle_retry_attempt($order_ids, $update, $retry_attempt, 'send_batch');
         }
 
