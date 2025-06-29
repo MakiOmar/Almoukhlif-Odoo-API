@@ -214,8 +214,8 @@ class Odoo_Helpers {
         }
 
         foreach ($response_data->result->Data as $odoo_order) {
-            if (isset($odoo_order->requestID)) {
-                $order = wc_get_order($odoo_order->requestID);
+            if (isset($odoo_order->ID)) {
+                $order = wc_get_order($odoo_order->ID);
                 if ($order) {
                     $order->add_order_note("تم تحديث حالة الطلب في أودو بنجاح إلى: $order_status.", false);
                 }

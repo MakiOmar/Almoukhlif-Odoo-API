@@ -171,21 +171,6 @@ function register_odoo_update_stock_endpoint() {
 			'methods'             => 'POST',
 			'callback'            => 'odoo_update_order_status_endpoint',
 			'permission_callback' => 'odoo_update_stock_permission_check',
-			'args'                => array(
-				'order_id' => array(
-					'required' => true,
-					'type'     => 'integer',
-				),
-				'status'   => array(
-					'required' => true,
-					'type'     => 'string',
-				),
-				'action'   => array(
-					'required' => true,
-					'type'     => 'string',
-					'enum'     => array( 'cancel', 'ship', 'update' ), // نحصرها للثلاثة حالات فقط
-				),
-			),
 		)
 	);
 }
@@ -195,7 +180,7 @@ function odoo_update_order_status_endpoint( $request ) {
 	$status   = $request->get_param( 'status' );
 	$action   = $request->get_param( 'action' );
 
-	if ( empty( $order_id ) || empty( $status ) || empty( $action ) ) {
+	if ( empty( $order_id ) || empty( $status ) ) {
 		return new WP_Error( 'missing_params', 'Missing required parameters.', array( 'status' => 400 ) );
 	}
 
