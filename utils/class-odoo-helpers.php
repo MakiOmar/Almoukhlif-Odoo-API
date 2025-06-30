@@ -172,6 +172,7 @@ class Odoo_Helpers {
         }
 
         $orders_data = array();
+        $order_status_labels = array(); // Store status labels for success messages
 
         foreach ($order_ids as $order_id) {
             $order = wc_get_order($order_id);
@@ -186,10 +187,14 @@ class Odoo_Helpers {
 
             // Use the new status if provided, otherwise get the current order status
             $order_status = $new_status ?? $order->get_status();
+            
+            // Get the status label for the success message
+            $status_label = wc_get_order_statuses()["wc-$order_status"] ?? $order_status;
+            $order_status_labels[$order_id] = $status_label;
 
             $order_data = array(
                 'RequestID'       => $odoo_order_id,
-                'wc_order_status' => wc_get_order_statuses()["wc-$order_status"] ?? $order_status,
+                'wc_order_status' => $status_label,
                 'modified_date' => current_time('Y-m-d H:i:s'),
             );
 
@@ -214,10 +219,12 @@ class Odoo_Helpers {
         }
 
         foreach ($response_data->result->Data as $odoo_order) {
-            if (isset($odoo_order->ID)) {
-                $order = wc_get_order($odoo_order->ID);
+            if (isset($odoo_order->woo_commerce_id)) {
+                $order = wc_get_order($odoo_order->woo_commerce_id);
                 if ($order) {
-                    $order->add_order_note("تم تحديث حالة الطلب في أودو بنجاح إلى: $order_status.", false);
+                    $order_id = $order->get_id();
+                    $status_label = $order_status_labels[$order_id] ?? 'unknown';
+                    $order->add_order_note("تم تحديث حالة الطلب في أودو بنجاح إلى: $status_label.", false);
                 }
             }
         }
