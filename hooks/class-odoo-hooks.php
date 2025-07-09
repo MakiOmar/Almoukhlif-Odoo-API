@@ -26,6 +26,12 @@ class Odoo_Hooks {
         add_action('woocommerce_process_shop_order_meta', array(__CLASS__, 'on_order_updated'), 99);
         add_action('woocommerce_order_status_changed', array(__CLASS__, 'on_order_status_changed'), 10, 3);
         
+        // Hook into post updates to catch ALL order status changes (including $order->update_status())
+        add_action('post_updated', array(__CLASS__, 'on_post_updated'), 10, 3);
+        
+        // Hook into REST API to catch order status changes via API
+        add_action('rest_api_init', array(__CLASS__, 'hook_rest_api_status_changes'));
+        
         // Admin hooks
         add_action('woocommerce_admin_order_data_after_billing_address', array('Odoo_Helpers', 'display_odoo_order_id_in_admin'), 10, 1);
         add_action('woocommerce_admin_order_data_after_order_details', array(__CLASS__, 'add_sync_button'));
@@ -95,6 +101,122 @@ class Odoo_Hooks {
         }
         
         Odoo_Helpers::update_odoo_order_status(array($order_id), $new_status);
+    }
+    
+    /**
+     * Handle post updates to catch ALL order status changes (including $order->update_status())
+     * This hook catches changes that might bypass the standard WooCommerce hooks
+     */
+    public static function on_post_updated($post_id, $post_after, $post_before) {
+        // Only process shop_order post types
+        if ($post_after->post_type !== 'shop_order') {
+            return;
+        }
+        
+        // Check if the post status changed
+        if ($post_after->post_status === $post_before->post_status) {
+            return;
+        }
+        
+        // Get the order object
+        $order = wc_get_order($post_id);
+        if (!$order) {
+            return;
+        }
+        
+        // Extract status without 'wc-' prefix for comparison
+        $old_status = str_replace('wc-', '', $post_before->post_status);
+        $new_status = str_replace('wc-', '', $post_after->post_status);
+        
+        // Only proceed if status actually changed
+        if ($old_status === $new_status) {
+            return;
+        }
+        
+        // Log this status change through our activity logger
+        if (class_exists('Odoo_Order_Activity_Logger')) {
+            Odoo_Order_Activity_Logger::log_order_status_change($post_id, $old_status, $new_status, $order);
+        }
+        
+        // Handle the same logic as on_order_status_changed
+        if ('cancelled' === $new_status || 'was-canceled' === $new_status || 'wc-cancelled' === $new_status || 'custom-failed' === $new_status || 'failed' === $new_status) {
+            $odoo_order_id = get_post_meta($post_id, 'odoo_order', true);
+            if ($odoo_order_id) {
+                Odoo_Helpers::cancel_odoo_order($odoo_order_id, $post_id);
+            }
+        }
+
+        if ('international-shi' === $new_status || 'was-shipped' === $new_status || 'received' === $new_status) {
+            Odoo_Helpers::validate_order_delivery_on_completion($post_id);
+        }
+        
+        Odoo_Helpers::update_odoo_order_status(array($post_id), $new_status);
+    }
+    
+    /**
+     * Hook into REST API to catch order status changes
+     */
+    public static function hook_rest_api_status_changes() {
+        // Hook into REST API order updates
+        add_filter('woocommerce_rest_prepare_shop_order_object', array(__CLASS__, 'log_rest_api_order_update'), 10, 3);
+        add_action('woocommerce_rest_insert_shop_order_object', array(__CLASS__, 'on_rest_api_order_update'), 10, 3);
+    }
+    
+    /**
+     * Log REST API order updates
+     */
+    public static function log_rest_api_order_update($response, $order, $request) {
+        // Log the REST API update through our activity logger
+        if (class_exists('Odoo_Order_Activity_Logger')) {
+            $order_id = $order->get_id();
+            $activity_data = array(
+                'order_id' => $order_id,
+                'activity_type' => 'rest_api_update',
+                'status' => $order->get_status(),
+                'user_id' => get_current_user_id(),
+                'user_info' => Odoo_Order_Activity_Logger::get_user_info(),
+                'trigger_source' => 'REST API',
+                'timestamp' => current_time('Y-m-d H:i:s'),
+                'ip_address' => Odoo_Order_Activity_Logger::get_client_ip(),
+                'user_agent' => Odoo_Order_Activity_Logger::get_user_agent(),
+                'backtrace' => Odoo_Order_Activity_Logger::get_backtrace_info(),
+                'request_data' => $request->get_params()
+            );
+            
+            Odoo_Order_Activity_Logger::write_activity_log($activity_data);
+        }
+        
+        return $response;
+    }
+    
+    /**
+     * Handle REST API order updates
+     */
+    public static function on_rest_api_order_update($order, $request, $creating) {
+        // Only process if not creating (i.e., updating)
+        if ($creating) {
+            return;
+        }
+        
+        $order_id = $order->get_id();
+        
+        // Check if status was changed via REST API
+        $status_param = $request->get_param('status');
+        if ($status_param && $status_param !== $order->get_status()) {
+            // Handle the same logic as on_order_status_changed
+            if ('cancelled' === $status_param || 'was-canceled' === $status_param || 'wc-cancelled' === $status_param || 'custom-failed' === $status_param || 'failed' === $status_param) {
+                $odoo_order_id = get_post_meta($order_id, 'odoo_order', true);
+                if ($odoo_order_id) {
+                    Odoo_Helpers::cancel_odoo_order($odoo_order_id, $order_id);
+                }
+            }
+
+            if ('international-shi' === $status_param || 'was-shipped' === $status_param || 'received' === $status_param) {
+                Odoo_Helpers::validate_order_delivery_on_completion($order_id);
+            }
+            
+            Odoo_Helpers::update_odoo_order_status(array($order_id), $status_param);
+        }
     }
     
     /**

@@ -56,6 +56,10 @@ class Odoo_Activity_Debug {
             self::test_update_checker();
         }
         
+        if (isset($_POST['test_update_status_tracking']) && wp_verify_nonce($_POST['_wpnonce'], 'test_update_status_tracking')) {
+            self::test_update_status_tracking();
+        }
+        
         if (isset($_POST['clear_logs']) && wp_verify_nonce($_POST['_wpnonce'], 'clear_odoo_logs')) {
             self::clear_logs();
         }
@@ -88,6 +92,16 @@ class Odoo_Activity_Debug {
                 <form method="post">
                     <?php wp_nonce_field('test_update_checker'); ?>
                     <input type="submit" name="test_update_checker" class="button button-primary" value="<?php _e('Test Update Checker', 'text-domain'); ?>">
+                </form>
+            </div>
+            
+            <!-- Test Update Status Tracking -->
+            <div class="card">
+                <h2><?php _e('Test Update Status Tracking', 'text-domain'); ?></h2>
+                <p><?php _e('Click the button below to test if $order->update_status() calls are being tracked by the logging system.', 'text-domain'); ?></p>
+                <form method="post">
+                    <?php wp_nonce_field('test_update_status_tracking'); ?>
+                    <input type="submit" name="test_update_status_tracking" class="button button-primary" value="<?php _e('Test Update Status Tracking', 'text-domain'); ?>">
                 </form>
             </div>
             
@@ -468,5 +482,84 @@ class Odoo_Activity_Debug {
         }
         
         return $stats;
+    }
+    
+    /**
+     * Test order update_status() tracking
+     */
+    public static function test_update_status_tracking() {
+        if (!current_user_can('manage_options')) {
+            return;
+        }
+        
+        echo '<div class="wrap">';
+        echo '<h2>Order Update Status Tracking Test</h2>';
+        
+        // Get a test order (first order we can find)
+        $orders = wc_get_orders(array(
+            'limit' => 1,
+            'status' => array('processing', 'completed', 'on-hold')
+        ));
+        
+        if (empty($orders)) {
+            echo '<div class="notice notice-error"><p>No orders found for testing. Please create an order first.</p></div>';
+            echo '</div>';
+            return;
+        }
+        
+        $order = $orders[0];
+        $order_id = $order->get_id();
+        $current_status = $order->get_status();
+        
+        echo '<div class="notice notice-info"><p>Testing with Order #' . esc_html($order_id) . ' (Current status: ' . esc_html($current_status) . ')</p></div>';
+        
+        // Test different status changes
+        $test_statuses = array('on-hold', 'processing', 'completed');
+        $original_status = $current_status;
+        
+        foreach ($test_statuses as $test_status) {
+            if ($test_status === $current_status) {
+                continue; // Skip if already in this status
+            }
+            
+            echo '<div class="notice notice-info"><p>Testing status change to: ' . esc_html($test_status) . '</p></div>';
+            
+            try {
+                // Change status using update_status()
+                $order->update_status($test_status, 'Test status change via update_status() - ' . date('Y-m-d H:i:s'));
+                
+                echo '<div class="notice notice-success"><p>✓ Status changed to ' . esc_html($test_status) . ' successfully</p></div>';
+                
+                // Wait a moment for hooks to process
+                sleep(1);
+                
+                // Check if it was logged
+                $log_file = WP_CONTENT_DIR . '/order-activity-logs/' . date('Y-m-d') . '.log';
+                if (file_exists($log_file)) {
+                    $log_content = file_get_contents($log_file);
+                    if (strpos($log_content, "Order #$order_id") !== false && strpos($log_content, $test_status) !== false) {
+                        echo '<div class="notice notice-success"><p>✓ Status change was logged successfully</p></div>';
+                    } else {
+                        echo '<div class="notice notice-warning"><p>⚠ Status change may not have been logged</p></div>';
+                    }
+                } else {
+                    echo '<div class="notice notice-warning"><p>⚠ No log file found for today</p></div>';
+                }
+                
+            } catch (Exception $e) {
+                echo '<div class="notice notice-error"><p>✗ Error changing status: ' . esc_html($e->getMessage()) . '</p></div>';
+            }
+        }
+        
+        // Restore original status
+        try {
+            $order->update_status($original_status, 'Restoring original status after test');
+            echo '<div class="notice notice-success"><p>✓ Original status restored</p></div>';
+        } catch (Exception $e) {
+            echo '<div class="notice notice-error"><p>✗ Error restoring original status: ' . esc_html($e->getMessage()) . '</p></div>';
+        }
+        
+        echo '<div class="notice notice-info"><p><strong>Test completed!</strong> Check the Order Activity Logs page to see if all status changes were tracked.</p></div>';
+        echo '</div>';
     }
 } 
