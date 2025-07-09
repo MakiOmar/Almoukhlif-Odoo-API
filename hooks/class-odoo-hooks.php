@@ -97,6 +97,10 @@ class Odoo_Hooks {
      * Handle order status changes
      */
     public static function on_order_status_changed($order_id, $old_status, $new_status) {
+        // Debug logging
+        if (function_exists('teamlog')) {
+            teamlog("Order status changed hook - Order #$order_id: $old_status -> $new_status");
+        }
         // Check if the new status is 'cancelled'.
         if ('cancelled' === $new_status || 'was-canceled' === $new_status || 'wc-cancelled' === $new_status || 'custom-failed' === $new_status || 'failed' === $new_status) {
             $odoo_order_id = get_post_meta($order_id, 'odoo_order', true);
@@ -117,13 +121,24 @@ class Odoo_Hooks {
      * This hook catches changes that might bypass the standard WooCommerce hooks
      */
     public static function on_post_updated($post_id, $post_after, $post_before) {
+        // Debug logging
+        if (function_exists('teamlog')) {
+            teamlog("Post updated hook - Post #$post_id: {$post_before->post_status} -> {$post_after->post_status}");
+        }
+        
         // Only process shop_order post types
         if ($post_after->post_type !== 'shop_order') {
+            if (function_exists('teamlog')) {
+                teamlog("Post updated hook - Post #$post_id: Not a shop_order, skipping");
+            }
             return;
         }
         
         // Check if the post status changed
         if ($post_after->post_status === $post_before->post_status) {
+            if (function_exists('teamlog')) {
+                teamlog("Post updated hook - Post #$post_id: No status change, skipping");
+            }
             return;
         }
         
@@ -178,6 +193,11 @@ class Odoo_Hooks {
         $original_status = str_replace('wc-', '', $original_status);
         
         self::$original_order_statuses[$order_id] = $original_status;
+        
+        // Debug logging
+        if (function_exists('teamlog')) {
+            teamlog("Before save - Order #$order_id: Original status = $original_status");
+        }
     }
     
     /**
@@ -201,14 +221,29 @@ class Odoo_Hooks {
         // Clean up the stored status
         unset(self::$original_order_statuses[$order_id]);
         
+        // Debug logging
+        if (function_exists('teamlog')) {
+            teamlog("After save - Order #$order_id: Original = $original_status, Current = $current_status");
+        }
+        
         // Only proceed if we have an original status and it's different
         if ($original_status === null || $original_status === $current_status) {
+            if (function_exists('teamlog')) {
+                teamlog("After save - Order #$order_id: No status change detected (Original: $original_status, Current: $current_status)");
+            }
             return;
         }
         
         // Log this status change through our activity logger
         if (class_exists('Odoo_Order_Activity_Logger')) {
+            if (function_exists('teamlog')) {
+                teamlog("After save - Order #$order_id: Logging status change from $original_status to $current_status");
+            }
             Odoo_Order_Activity_Logger::log_order_status_change($order_id, $original_status, $current_status, $order);
+        } else {
+            if (function_exists('teamlog')) {
+                teamlog("After save - Order #$order_id: Odoo_Order_Activity_Logger class not found");
+            }
         }
         
         // Handle the same logic as on_order_status_changed

@@ -2,11 +2,19 @@
 
 A comprehensive WordPress plugin that integrates WooCommerce with Odoo ERP system for stock validation, order synchronization, and inventory management.
 
-**Current Version: 1.231**
+**Current Version: 1.232**
 
 ## 📋 Changelog
 
-### Version 1.231 (Latest)
+### Version 1.232 (Latest)
+- 🔧 **ENHANCED**: Comprehensive debugging for order status tracking
+  - Added detailed debug logging to all order status change hooks
+  - Added hook registration verification in debug tools
+  - Enhanced test function to verify log file creation and content
+  - Added step-by-step debugging to identify why status changes aren't being logged
+  - Improved troubleshooting capabilities for order tracking issues
+
+### Version 1.231
 - 🔧 **FIXED**: PHP Fatal error with debug class accessing private methods
   - Made `write_activity_log()` method public in `Odoo_Order_Activity_Logger` class
   - Made helper methods (`get_user_info`, `detect_trigger_source`, `get_client_ip`, `get_user_agent`, `get_backtrace_info`) public

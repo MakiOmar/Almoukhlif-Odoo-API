@@ -581,6 +581,20 @@ class Odoo_Activity_Debug {
             
             Odoo_Order_Activity_Logger::write_activity_log($test_log_data);
             echo '<div class="notice notice-success"><p>✓ Test log entry created successfully</p></div>';
+            
+            // Verify the log entry was actually written
+            $log_file = $logs_dir . '/order-activity-' . date('Y-m-d') . '.log';
+            if (file_exists($log_file)) {
+                $log_content = file_get_contents($log_file);
+                if (strpos($log_content, "Order #$order_id") !== false) {
+                    echo '<div class="notice notice-success"><p>✓ Log entry verified in file</p></div>';
+                } else {
+                    echo '<div class="notice notice-warning"><p>⚠ Log entry not found in file</p></div>';
+                    echo '<div class="notice notice-info"><p>Debug: Log file content length: ' . strlen($log_content) . ' characters</p></div>';
+                }
+            } else {
+                echo '<div class="notice notice-error"><p>✗ Log file not found after writing</p></div>';
+            }
         } else {
             echo '<div class="notice notice-error"><p>✗ Odoo_Order_Activity_Logger class not available</p></div>';
         }
@@ -650,6 +664,55 @@ class Odoo_Activity_Debug {
         }
         
         echo '<div class="notice notice-info"><p><strong>Test completed!</strong> Check the Order Activity Logs page to see if all status changes were tracked.</p></div>';
+        
+        // Test hook registration
+        echo '<div class="notice notice-info"><p>Testing hook registration...</p></div>';
+        self::test_hook_registration();
+        
+        echo '</div>';
+    }
+    
+    /**
+     * Test if hooks are properly registered
+     */
+    private static function test_hook_registration() {
+        global $wp_filter;
+        
+        $hooks_to_check = array(
+            'woocommerce_order_status_changed' => 'Order status changed hook',
+            'woocommerce_before_shop_order_object_save' => 'Before order save hook',
+            'woocommerce_after_shop_order_object_save' => 'After order save hook',
+            'post_updated' => 'Post updated hook'
+        );
+        
+        echo '<div class="card">';
+        echo '<h3>Hook Registration Test</h3>';
+        echo '<table class="form-table">';
+        echo '<tr><th>Hook Name</th><th>Status</th><th>Details</th></tr>';
+        
+        foreach ($hooks_to_check as $hook_name => $description) {
+            if (isset($wp_filter[$hook_name])) {
+                $callbacks = $wp_filter[$hook_name]->callbacks;
+                $callback_count = 0;
+                foreach ($callbacks as $priority => $priority_callbacks) {
+                    $callback_count += count($priority_callbacks);
+                }
+                
+                echo '<tr>';
+                echo '<td><code>' . esc_html($hook_name) . '</code></td>';
+                echo '<td><span style="color: green;">✓ Registered</span></td>';
+                echo '<td>' . esc_html($callback_count) . ' callback(s) registered</td>';
+                echo '</tr>';
+            } else {
+                echo '<tr>';
+                echo '<td><code>' . esc_html($hook_name) . '</code></td>';
+                echo '<td><span style="color: red;">✗ Not Registered</span></td>';
+                echo '<td>Hook not found</td>';
+                echo '</tr>';
+            }
+        }
+        
+        echo '</table>';
         echo '</div>';
     }
 } 
