@@ -360,7 +360,7 @@ class Odoo_Order_Activity_Logger {
      * 
      * @param array $activity_data Activity data to log
      */
-    private static function write_activity_log($activity_data) {
+    public static function write_activity_log($activity_data) {
         // Create logs directory if it doesn't exist
         $logs_dir = WP_CONTENT_DIR . '/order-activity-logs';
         if (!file_exists($logs_dir)) {
@@ -406,7 +406,7 @@ class Odoo_Order_Activity_Logger {
      * 
      * @return array User information
      */
-    private static function get_user_info() {
+    public static function get_user_info() {
         $user_id = get_current_user_id();
         
         if ($user_id) {
@@ -434,7 +434,7 @@ class Odoo_Order_Activity_Logger {
      * 
      * @return string Trigger source
      */
-    private static function detect_trigger_source() {
+    public static function detect_trigger_source() {
         if (wp_doing_ajax()) {
             return 'AJAX';
         }
@@ -463,7 +463,7 @@ class Odoo_Order_Activity_Logger {
      * 
      * @return string IP address
      */
-    private static function get_client_ip() {
+    public static function get_client_ip() {
         $ip_keys = array('HTTP_CLIENT_IP', 'HTTP_X_FORWARDED_FOR', 'REMOTE_ADDR');
         
         foreach ($ip_keys as $key) {
@@ -485,7 +485,7 @@ class Odoo_Order_Activity_Logger {
      * 
      * @return string User agent
      */
-    private static function get_user_agent() {
+    public static function get_user_agent() {
         return isset($_SERVER['HTTP_USER_AGENT']) ? $_SERVER['HTTP_USER_AGENT'] : 'Unknown';
     }
     
@@ -494,7 +494,7 @@ class Odoo_Order_Activity_Logger {
      * 
      * @return array Backtrace info
      */
-    private static function get_backtrace_info() {
+    public static function get_backtrace_info() {
         $backtrace = debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS, 5);
         $relevant_trace = array();
         
