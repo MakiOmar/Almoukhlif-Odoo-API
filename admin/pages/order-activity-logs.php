@@ -33,6 +33,38 @@ if (!function_exists('display_order_activity_logs_page')) {
         $logs = array();
         if (class_exists('Odoo_Order_Activity_Logger')) {
             $logs = Odoo_Order_Activity_Logger::get_activity_logs($start_date, $end_date, $filters);
+            
+            // Debug information
+            if (current_user_can('manage_options')) {
+                $logs_dir = WP_CONTENT_DIR . '/order-activity-logs';
+                $debug_info = array(
+                    'logs_dir_exists' => file_exists($logs_dir),
+                    'logs_dir_writable' => is_writable($logs_dir),
+                    'start_date' => $start_date,
+                    'end_date' => $end_date,
+                    'total_logs_found' => count($logs),
+                    'filters_applied' => $filters
+                );
+                
+                // Check for log files in the date range
+                $log_files_found = array();
+                $start = new DateTime($start_date);
+                $end = new DateTime($end_date);
+                
+                for ($date = clone $start; $date <= $end; $date->add(new DateInterval('P1D'))) {
+                    $log_file = $logs_dir . '/order-activity-' . $date->format('Y-m-d') . '.log';
+                    if (file_exists($log_file)) {
+                        $file_size = filesize($log_file);
+                        $line_count = count(file($log_file, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES));
+                        $log_files_found[] = array(
+                            'file' => basename($log_file),
+                            'size' => $file_size,
+                            'lines' => $line_count
+                        );
+                    }
+                }
+                $debug_info['log_files_found'] = $log_files_found;
+            }
         }
         
         // Pagination
@@ -125,6 +157,65 @@ if (!function_exists('display_order_activity_logs_page')) {
                     ); ?>
                 </p>
             </div>
+            
+            <!-- Debug Information (for administrators) -->
+            <?php if (current_user_can('manage_options') && isset($debug_info)): ?>
+                <div class="notice notice-warning">
+                    <h4>Debug Information:</h4>
+                    <ul>
+                        <li><strong>Logs Directory Exists:</strong> <?php echo $debug_info['logs_dir_exists'] ? '✓ Yes' : '✗ No'; ?></li>
+                        <li><strong>Logs Directory Writable:</strong> <?php echo $debug_info['logs_dir_writable'] ? '✓ Yes' : '✗ No'; ?></li>
+                        <li><strong>Date Range:</strong> <?php echo esc_html($debug_info['start_date']); ?> to <?php echo esc_html($debug_info['end_date']); ?></li>
+                        <li><strong>Total Logs Found:</strong> <?php echo esc_html($debug_info['total_logs_found']); ?></li>
+                        <li><strong>Filters Applied:</strong> <?php echo esc_html(json_encode($debug_info['filters_applied'])); ?></li>
+                    </ul>
+                    
+                    <?php if (!empty($debug_info['log_files_found'])): ?>
+                        <h4>Log Files Found:</h4>
+                        <ul>
+                            <?php foreach ($debug_info['log_files_found'] as $file_info): ?>
+                                <li>
+                                    <strong><?php echo esc_html($file_info['file']); ?></strong>
+                                    (Size: <?php echo size_format($file_info['size']); ?>, 
+                                    Lines: <?php echo esc_html($file_info['lines']); ?>)
+                                </li>
+                            <?php endforeach; ?>
+                        </ul>
+                    <?php else: ?>
+                        <p><strong>No log files found in the specified date range.</strong></p>
+                    <?php endif; ?>
+                    
+                    <!-- Raw Log File Contents (for debugging) -->
+                    <?php if (!empty($debug_info['log_files_found'])): ?>
+                        <h4>Raw Log File Contents:</h4>
+                        <?php foreach ($debug_info['log_files_found'] as $file_info): ?>
+                            <details>
+                                <summary><?php echo esc_html($file_info['file']); ?> (<?php echo esc_html($file_info['lines']); ?> lines)</summary>
+                                <div style="background: #f1f1f1; padding: 10px; margin: 10px 0; max-height: 300px; overflow-y: auto; font-family: monospace; font-size: 12px;">
+                                    <?php
+                                    $log_file = WP_CONTENT_DIR . '/order-activity-logs/' . $file_info['file'];
+                                    if (file_exists($log_file)) {
+                                        $content = file_get_contents($log_file);
+                                        if ($content) {
+                                            $lines = explode("\n", $content);
+                                            foreach ($lines as $line_num => $line) {
+                                                if (trim($line)) {
+                                                    echo '<div>' . esc_html(($line_num + 1) . ': ' . $line) . '</div>';
+                                                }
+                                            }
+                                        } else {
+                                            echo '<div>Error: Could not read file contents</div>';
+                                        }
+                                    } else {
+                                        echo '<div>Error: File not found</div>';
+                                    }
+                                    ?>
+                                </div>
+                            </details>
+                        <?php endforeach; ?>
+                    <?php endif; ?>
+                </div>
+            <?php endif; ?>
             
             <!-- Logs Table -->
             <table class="wp-list-table widefat fixed striped">
