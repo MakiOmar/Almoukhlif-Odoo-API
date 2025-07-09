@@ -13,6 +13,11 @@ class Odoo_Hooks {
      * Initialize all hooks
      */
     public static function init() {
+        // Initialize order activity logger
+        if (class_exists('Odoo_Order_Activity_Logger')) {
+            Odoo_Order_Activity_Logger::init();
+        }
+        
         // Stock validation hooks
         add_filter('woocommerce_add_to_cart_validation', array('Odoo_Stock', 'check_stock_before_add_to_cart'), 10, 5);
         

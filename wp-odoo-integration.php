@@ -24,6 +24,18 @@ try {
     
     require_once $core_file;
     
+    // Load order activity logger
+    $activity_logger_file = plugin_dir_path(__FILE__) . 'utils/class-odoo-order-activity-logger.php';
+    if (file_exists($activity_logger_file)) {
+        require_once $activity_logger_file;
+    }
+    
+    // Load activity debug class
+    $activity_debug_file = plugin_dir_path(__FILE__) . 'utils/class-odoo-activity-debug.php';
+    if (file_exists($activity_debug_file)) {
+        require_once $activity_debug_file;
+    }
+    
     // Initialize core
     if (class_exists('Odoo_Core')) {
         $odoo_core = new Odoo_Core();
@@ -39,6 +51,11 @@ try {
         if (class_exists('Odoo_Admin')) {
             Odoo_Admin::init();
         }
+    }
+    
+    // Initialize activity debug
+    if (class_exists('Odoo_Activity_Debug')) {
+        Odoo_Activity_Debug::init();
     }
     
     // Initialize hooks

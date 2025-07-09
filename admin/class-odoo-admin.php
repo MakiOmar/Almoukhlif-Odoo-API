@@ -81,6 +81,15 @@ class Odoo_Admin {
             'odoo-failed-orders',
             array(__CLASS__, 'render_failed_orders_page')
         );
+
+        add_submenu_page(
+            'odoo-orders',
+            'Order Activity Logs',
+            'Activity Logs',
+            'manage_woocommerce',
+            'order-activity-logs',
+            array(__CLASS__, 'render_order_activity_logs_page')
+        );
     }
     
     /**
@@ -275,6 +284,16 @@ class Odoo_Admin {
         require_once plugin_dir_path(__FILE__) . 'pages/failed-orders.php';
         if (function_exists('display_odoo_failed_orders_page')) {
             display_odoo_failed_orders_page();
+        }
+    }
+    
+    /**
+     * Render order activity logs page
+     */
+    public static function render_order_activity_logs_page() {
+        require_once plugin_dir_path(__FILE__) . 'pages/order-activity-logs.php';
+        if (function_exists('display_order_activity_logs_page')) {
+            display_order_activity_logs_page();
         }
     }
     

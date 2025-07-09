@@ -106,6 +106,116 @@ The plugin provides a comprehensive admin interface with:
 - **Advanced Filtration**: Date range, order status, customer search, and order ID filters
 - **Cached Counts**: 5-minute cache for admin bar counts to reduce server load
 
+## 📊 Order Activity Logging System
+
+The plugin includes a comprehensive order activity logging system that tracks all order status changes and activities for audit purposes. This system helps you understand who changed order statuses, when, and how the changes were triggered.
+
+### **Features**
+
+- **Complete Activity Tracking**: Logs all order status changes, creations, updates, and Odoo interactions
+- **User Identification**: Tracks which user performed each action
+- **Source Detection**: Identifies whether changes came from admin panel, REST API, AJAX, etc.
+- **Detailed Context**: Captures IP addresses, user agents, and backtrace information
+- **Daily Log Files**: Organizes logs by date for easy management
+- **Admin Interface**: Provides a comprehensive admin page to view and filter logs
+- **teamlog Integration**: Uses your existing teamlog function for additional logging
+
+### **What Gets Logged**
+
+#### **Order Status Changes**
+- Status changes from any source (admin panel, REST API, AJAX, etc.)
+- Old and new status values
+- User who made the change
+- Timestamp and IP address
+
+#### **Order Activities**
+- Order creation
+- Order updates
+- Admin panel interactions
+- Bulk actions
+- AJAX operations
+
+#### **Odoo Integration Activities**
+- Orders sent to Odoo (success/failure)
+- Order cancellations in Odoo
+- Authentication failures
+- API response details
+
+#### **System Information**
+- Trigger source (Admin Panel, REST API, AJAX, Frontend, etc.)
+- User information (ID, username, display name, roles)
+- IP address and user agent
+- Backtrace information for debugging
+
+### **Log File Structure**
+
+Logs are stored in `wp-content/order-activity-logs/` with daily files:
+- Format: `order-activity-YYYY-MM-DD.log`
+- Each line is a JSON object containing complete activity information
+- Files are automatically created and managed
+
+### **Admin Interface**
+
+Access the activity logs via **Odoo Orders → Activity Logs** in the WordPress admin:
+
+#### **Filtering Options**
+- Date range selection
+- Order ID filtering
+- Activity type filtering
+- User filtering
+- Trigger source filtering
+
+#### **Log Details**
+- Click "View Details" to see complete log information
+- Modal popup with structured data display
+- Backtrace information for debugging
+- Additional context data
+
+### **Debug Tools**
+
+Access debug tools via **Tools → Odoo Activity Debug**:
+
+#### **Testing**
+- Test logging functionality
+- Verify system configuration
+- Check log directory permissions
+
+#### **Management**
+- View log file information
+- Clear all log files
+- System information display
+
+### **Usage Examples**
+
+#### **Viewing Logs for a Specific Order**
+1. Go to **Odoo Orders → Activity Logs**
+2. Enter the order ID in the filter
+3. Click "Filter" to see all activities for that order
+
+#### **Investigating Status Changes**
+1. Filter by activity type "Status Change"
+2. Set date range to cover the period of interest
+3. Review user information and trigger sources
+
+#### **Audit Trail**
+1. Use date range filters to focus on specific periods
+2. Filter by user to see all actions by a specific person
+3. Export or review logs for compliance purposes
+
+### **Configuration**
+
+The logging system is automatically enabled when the plugin is active. No additional configuration is required.
+
+#### **Log Retention**
+- Logs are stored indefinitely by default
+- Use the debug tools to manually clear old logs
+- Consider implementing automated log rotation for production
+
+#### **Performance**
+- Logging is designed to be lightweight and non-blocking
+- Uses file locking to prevent corruption
+- Minimal impact on order processing performance
+
 ## 🚨 Odoo Status Failures & Order Notes
 
 The plugin tracks order synchronization status using the `oodo-status` meta key and stores detailed error messages in order notes. Here's what happens when orders fail:

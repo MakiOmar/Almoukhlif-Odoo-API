@@ -46,6 +46,20 @@ class Odoo_Orders {
         // Process response using unified processor
         $result = Odoo_Response::process_unified($response_data, $orders_temp, $update, false);
 
+        // Trigger activity logger events
+        if ($result['success']) {
+            foreach ($result['processed_orders'] as $order_id) {
+                do_action('odoo_order_sent', $order_id, $response_data);
+            }
+        } else {
+            foreach ($order_ids as $order_id) {
+                do_action('odoo_order_failed', $order_id, array(
+                    'error' => $result['message'],
+                    'response' => $response_data
+                ));
+            }
+        }
+
         // Handle retries if needed
         if (!$result['success'] && $retry_attempt < 3) {
             teamlog("Retry attempt for response: " . print_r($response_data, true));
@@ -91,6 +105,20 @@ class Odoo_Orders {
 
         // Process response using unified processor
         $result = Odoo_Response::process_unified($response_data, $orders_temp, false, true);
+
+        // Trigger activity logger events
+        if ($result['success']) {
+            foreach ($result['processed_orders'] as $order_id) {
+                do_action('odoo_order_sent', $order_id, $response_data);
+            }
+        } else {
+            foreach ($order_ids as $order_id) {
+                do_action('odoo_order_failed', $order_id, array(
+                    'error' => $result['message'],
+                    'response' => $response_data
+                ));
+            }
+        }
 
         // Handle retries if needed
         if (!$result['success'] && $retry_attempt < 3) {
