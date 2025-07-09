@@ -12,7 +12,7 @@ class Odoo_Core {
     /**
      * Plugin version
      */
-    const VERSION = '1.224';
+    const VERSION = '1.226';
     
     /**
      * Constructor
@@ -47,7 +47,10 @@ class Odoo_Core {
      * Load required dependencies
      */
     private function load_dependencies() {
-        $plugin_dir = plugin_dir_path(__FILE__);
+        // Use plugin constants for consistency
+        $includes_dir = ODOO_PLUGIN_DIR . 'includes/';
+        $utils_dir = ODOO_PLUGIN_DIR . 'utils/';
+        $update_checker_dir = ODOO_PLUGIN_DIR . 'plugin-update-checker/';
         
         // Load core classes with error handling
         $core_classes = [
@@ -59,7 +62,7 @@ class Odoo_Core {
         ];
         
         foreach ($core_classes as $class_file) {
-            $file_path = $plugin_dir . $class_file;
+            $file_path = $includes_dir . $class_file;
             if (file_exists($file_path)) {
                 require_once $file_path;
             } else {
@@ -68,7 +71,6 @@ class Odoo_Core {
         }
         
         // Load utility classes with error handling
-        $utils_dir = $plugin_dir . '../utils/';
         $utils_classes = [
             'class-odoo-helpers.php',
             'class-odoo-logger.php'
@@ -90,7 +92,7 @@ class Odoo_Core {
         ];
         
         foreach ($existing_files as $file) {
-            $file_path = $plugin_dir . $file;
+            $file_path = $includes_dir . $file;
             if (file_exists($file_path)) {
                 require_once $file_path;
             } else {
@@ -99,7 +101,7 @@ class Odoo_Core {
         }
         
         // Load plugin update checker
-        $update_checker_path = $plugin_dir . '../plugin-update-checker/plugin-update-checker.php';
+        $update_checker_path = $update_checker_dir . 'plugin-update-checker.php';
         if (file_exists($update_checker_path)) {
             require $update_checker_path;
         } else {
@@ -133,14 +135,23 @@ class Odoo_Core {
         }
         
         try {
+            // Use the plugin constants for consistency
+            $plugin_file = ODOO_PLUGIN_FILE;
+            $plugin_slug = 'wp-odoo-integration';
+            
+            // Debug logging
+            $this->log_error("Initializing update checker with plugin file: " . $plugin_file);
+            
             $anonyengine_update_checker = Puc_v4_Factory::buildUpdateChecker(
                 'https://github.com/MakiOmar/Almoukhlif-Odoo-API/',
-                plugin_dir_path(__FILE__) . '../wp-odoo-integration.php',
-                'wp-odoo-integration/wp-odoo-integration.php'
+                $plugin_file,
+                $plugin_slug
             );
             
             // Set the branch that contains the stable release
             $anonyengine_update_checker->setBranch('master');
+            
+            $this->log_error("Update checker initialized successfully");
         } catch (Exception $e) {
             $this->log_error("Failed to initialize update checker: " . $e->getMessage());
         }

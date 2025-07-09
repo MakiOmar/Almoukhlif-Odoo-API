@@ -52,6 +52,10 @@ class Odoo_Activity_Debug {
             self::test_logging();
         }
         
+        if (isset($_POST['test_update_checker']) && wp_verify_nonce($_POST['_wpnonce'], 'test_update_checker')) {
+            self::test_update_checker();
+        }
+        
         if (isset($_POST['clear_logs']) && wp_verify_nonce($_POST['_wpnonce'], 'clear_odoo_logs')) {
             self::clear_logs();
         }
@@ -74,6 +78,16 @@ class Odoo_Activity_Debug {
                 <form method="post">
                     <?php wp_nonce_field('test_odoo_logging'); ?>
                     <input type="submit" name="test_logging" class="button button-primary" value="<?php _e('Test Logging', 'text-domain'); ?>">
+                </form>
+            </div>
+            
+            <!-- Test Update Checker -->
+            <div class="card">
+                <h2><?php _e('Test Update Checker', 'text-domain'); ?></h2>
+                <p><?php _e('Click the button below to test the plugin update checker functionality.', 'text-domain'); ?></p>
+                <form method="post">
+                    <?php wp_nonce_field('test_update_checker'); ?>
+                    <input type="submit" name="test_update_checker" class="button button-primary" value="<?php _e('Test Update Checker', 'text-domain'); ?>">
                 </form>
             </div>
             
@@ -310,6 +324,91 @@ class Odoo_Activity_Debug {
         } else {
             echo '<div class="notice notice-warning"><p>' . __('No log files were deleted.', 'text-domain') . '</p></div>';
         }
+    }
+    
+    /**
+     * Test plugin update checker functionality
+     */
+    public static function test_update_checker() {
+        if (!current_user_can('manage_options')) {
+            return;
+        }
+        
+        echo '<div class="wrap">';
+        echo '<h2>Plugin Update Checker Test</h2>';
+        
+        // Check if update checker class exists
+        if (!class_exists('Puc_v4_Factory')) {
+            echo '<div class="notice notice-error"><p>Plugin Update Checker class not found!</p></div>';
+            return;
+        }
+        
+        echo '<div class="notice notice-success"><p>Plugin Update Checker class found.</p></div>';
+        
+        // Check if we can access the GitHub repository
+        $response = wp_remote_get('https://api.github.com/repos/MakiOmar/Almoukhlif-Odoo-API');
+        
+        if (is_wp_error($response)) {
+            echo '<div class="notice notice-error"><p>Error accessing GitHub repository: ' . $response->get_error_message() . '</p></div>';
+        } else {
+            $body = wp_remote_retrieve_body($response);
+            $data = json_decode($body, true);
+            
+            if ($data && isset($data['name'])) {
+                echo '<div class="notice notice-success"><p>GitHub repository accessible. Repository: ' . esc_html($data['name']) . '</p></div>';
+                
+                // Check for readme.txt
+                $readme_response = wp_remote_get('https://api.github.com/repos/MakiOmar/Almoukhlif-Odoo-API/contents/readme.txt');
+                if (!is_wp_error($readme_response) && wp_remote_retrieve_response_code($readme_response) === 200) {
+                    echo '<div class="notice notice-success"><p>readme.txt file found in repository.</p></div>';
+                } else {
+                    echo '<div class="notice notice-warning"><p>readme.txt file not found in repository. This may affect update checker functionality.</p></div>';
+                }
+                
+                // Check for releases
+                $releases_response = wp_remote_get('https://api.github.com/repos/MakiOmar/Almoukhlif-Odoo-API/releases/latest');
+                if (!is_wp_error($releases_response) && wp_remote_retrieve_response_code($releases_response) === 200) {
+                    $releases_body = wp_remote_retrieve_body($releases_response);
+                    $releases_data = json_decode($releases_body, true);
+                    if ($releases_data && isset($releases_data['tag_name'])) {
+                        echo '<div class="notice notice-success"><p>Latest release found: ' . esc_html($releases_data['tag_name']) . '</p></div>';
+                    }
+                } else {
+                    echo '<div class="notice notice-warning"><p>No releases found in repository.</p></div>';
+                }
+            } else {
+                echo '<div class="notice notice-error"><p>Could not parse GitHub repository data.</p></div>';
+            }
+        }
+        
+        // Check current plugin version
+        $plugin_data = get_plugin_data(ODOO_PLUGIN_FILE);
+        echo '<div class="notice notice-info"><p>Current plugin version: ' . esc_html($plugin_data['Version']) . '</p></div>';
+        
+        // Check if update checker is initialized
+        global $wp_filter;
+        if (isset($wp_filter['plugins_loaded'])) {
+            $has_update_checker = false;
+            foreach ($wp_filter['plugins_loaded']->callbacks as $priority => $callbacks) {
+                foreach ($callbacks as $callback) {
+                    if (is_array($callback['function']) && is_object($callback['function'][0])) {
+                        $class_name = get_class($callback['function'][0]);
+                        if ($class_name === 'Odoo_Core') {
+                            $has_update_checker = true;
+                            break 2;
+                        }
+                    }
+                }
+            }
+            
+            if ($has_update_checker) {
+                echo '<div class="notice notice-success"><p>Update checker is properly hooked to plugins_loaded.</p></div>';
+            } else {
+                echo '<div class="notice notice-error"><p>Update checker is not hooked to plugins_loaded.</p></div>';
+            }
+        }
+        
+        echo '</div>';
     }
     
     /**

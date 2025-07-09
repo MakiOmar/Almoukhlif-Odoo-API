@@ -14,7 +14,7 @@ class Odoo_Admin {
      */
     public static function init() {
         // Load admin includes
-        require_once plugin_dir_path(__FILE__) . 'includes/class-odoo-filters.php';
+        require_once ODOO_PLUGIN_DIR . 'admin/includes/class-odoo-filters.php';
         
         add_action('admin_menu', array(__CLASS__, 'add_admin_menu'));
         add_action('admin_bar_menu', array(__CLASS__, 'add_admin_bar_items'), 100);
@@ -254,7 +254,7 @@ class Odoo_Admin {
      * Render sent orders page
      */
     public static function render_sent_orders_page() {
-        require_once plugin_dir_path(__FILE__) . 'pages/sent-orders.php';
+        require_once ODOO_PLUGIN_DIR . 'admin/pages/sent-orders.php';
         if (function_exists('display_odoo_orders_with_meta_page')) {
             display_odoo_orders_with_meta_page();
         }
@@ -264,7 +264,7 @@ class Odoo_Admin {
      * Render missing status orders page
      */
     public static function render_missing_status_orders_page() {
-        require_once plugin_dir_path(__FILE__) . 'pages/missing-status-orders.php';
+        require_once ODOO_PLUGIN_DIR . 'admin/pages/missing-status-orders.php';
         if (function_exists('display_odoo_missing_status_orders_page')) {
             display_odoo_missing_status_orders_page();
         }
@@ -274,7 +274,7 @@ class Odoo_Admin {
      * Render all missing status orders page
      */
     public static function render_all_missing_status_orders_page() {
-        require_once plugin_dir_path(__FILE__) . 'pages/all-missing-status-orders.php';
+        require_once ODOO_PLUGIN_DIR . 'admin/pages/all-missing-status-orders.php';
         if (function_exists('display_all_odoo_missing_status_orders_page')) {
             display_all_odoo_missing_status_orders_page();
         }
@@ -284,7 +284,7 @@ class Odoo_Admin {
      * Render failed orders page
      */
     public static function render_failed_orders_page() {
-        require_once plugin_dir_path(__FILE__) . 'pages/failed-orders.php';
+        require_once ODOO_PLUGIN_DIR . 'admin/pages/failed-orders.php';
         if (function_exists('display_odoo_failed_orders_page')) {
             display_odoo_failed_orders_page();
         }
@@ -294,7 +294,7 @@ class Odoo_Admin {
      * Render order activity logs page
      */
     public static function render_order_activity_logs_page() {
-        require_once plugin_dir_path(__FILE__) . 'pages/order-activity-logs.php';
+        require_once ODOO_PLUGIN_DIR . 'admin/pages/order-activity-logs.php';
         if (function_exists('display_order_activity_logs_page')) {
             display_order_activity_logs_page();
         }
@@ -351,7 +351,7 @@ class Odoo_Admin {
         
         // Load debug class if not already loaded
         if (!class_exists('Odoo_Activity_Debug')) {
-            $activity_debug_file = plugin_dir_path(__FILE__) . '../utils/class-odoo-activity-debug.php';
+            $activity_debug_file = ODOO_PLUGIN_DIR . 'utils/class-odoo-activity-debug.php';
             if (file_exists($activity_debug_file)) {
                 require_once $activity_debug_file;
             }
