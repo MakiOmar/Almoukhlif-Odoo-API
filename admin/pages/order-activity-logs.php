@@ -15,8 +15,8 @@ if (!function_exists('display_order_activity_logs_page')) {
         }
         
         // Handle date range and filters
-        $start_date = isset($_GET['start_date']) ? sanitize_text_field($_GET['start_date']) : date('Y-m-d', strtotime('-30 days'));
-        $end_date = isset($_GET['end_date']) ? sanitize_text_field($_GET['end_date']) : date('Y-m-d');
+        $start_date = isset($_GET['start_date']) ? sanitize_text_field($_GET['start_date']) : date('Y-m-d', strtotime('-1 month'));
+        $end_date = isset($_GET['end_date']) ? sanitize_text_field($_GET['end_date']) : date('Y-m-d', strtotime('+1 day'));
         $order_id = isset($_GET['order_id']) ? intval($_GET['order_id']) : '';
         $activity_type = isset($_GET['activity_type']) ? sanitize_text_field($_GET['activity_type']) : '';
         $user_id = isset($_GET['user_id']) ? intval($_GET['user_id']) : '';
