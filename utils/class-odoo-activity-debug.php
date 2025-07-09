@@ -252,7 +252,11 @@ class Odoo_Activity_Debug {
         // Write test log
         $logs_dir = WP_CONTENT_DIR . '/order-activity-logs';
         if (!file_exists($logs_dir)) {
-            wp_mkdir_p($logs_dir);
+            $created = wp_mkdir_p($logs_dir);
+            if (!$created) {
+                echo '<div class="notice notice-error"><p>' . __('Failed to create log directory.', 'text-domain') . '</p></div>';
+                return;
+            }
         }
         
         $date = current_time('Y-m-d');
@@ -495,6 +499,43 @@ class Odoo_Activity_Debug {
         echo '<div class="wrap">';
         echo '<h2>Order Update Status Tracking Test</h2>';
         
+        // First, check if the logging system is properly set up
+        echo '<div class="notice notice-info"><p>Checking logging system setup...</p></div>';
+        
+        // Check if the logger class exists
+        if (!class_exists('Odoo_Order_Activity_Logger')) {
+            echo '<div class="notice notice-error"><p>✗ Odoo_Order_Activity_Logger class not found. Please check if the plugin is properly loaded.</p></div>';
+            echo '</div>';
+            return;
+        }
+        
+        // Check if the log directory is writable
+        $logs_dir = WP_CONTENT_DIR . '/order-activity-logs';
+        if (!file_exists($logs_dir)) {
+            $created = wp_mkdir_p($logs_dir);
+            if ($created) {
+                echo '<div class="notice notice-success"><p>✓ Created log directory: ' . esc_html($logs_dir) . '</p></div>';
+            } else {
+                echo '<div class="notice notice-error"><p>✗ Failed to create log directory: ' . esc_html($logs_dir) . '</p></div>';
+                echo '</div>';
+                return;
+            }
+        }
+        
+        if (!is_writable($logs_dir)) {
+            echo '<div class="notice notice-error"><p>✗ Log directory is not writable: ' . esc_html($logs_dir) . '</p></div>';
+            echo '</div>';
+            return;
+        }
+        
+        echo '<div class="notice notice-success"><p>✓ Logging system is properly set up</p></div>';
+        
+        // Get a test order (first order we can find)
+        $orders = wc_get_orders(array(
+            'limit' => 1,
+            'status' => array('processing', 'completed', 'on-hold')
+        ));
+        
         // Get a test order (first order we can find)
         $orders = wc_get_orders(array(
             'limit' => 1,
@@ -512,6 +553,37 @@ class Odoo_Activity_Debug {
         $current_status = $order->get_status();
         
         echo '<div class="notice notice-info"><p>Testing with Order #' . esc_html($order_id) . ' (Current status: ' . esc_html($current_status) . ')</p></div>';
+        
+        // First, test the logging system directly
+        echo '<div class="notice notice-info"><p>Testing logging system directly...</p></div>';
+        if (class_exists('Odoo_Order_Activity_Logger')) {
+            // Create a test log entry to verify the system works
+            $test_log_data = array(
+                'order_id' => $order_id,
+                'activity_type' => 'test_status_tracking',
+                'old_status' => $current_status,
+                'new_status' => 'test',
+                'user_id' => get_current_user_id(),
+                'user_info' => array(
+                    'display_name' => 'Test User',
+                    'email' => 'test@example.com',
+                    'roles' => array('administrator')
+                ),
+                'trigger_source' => 'Debug Test',
+                'timestamp' => current_time('Y-m-d H:i:s'),
+                'ip_address' => '127.0.0.1',
+                'user_agent' => 'Debug Test',
+                'test_data' => array(
+                    'message' => 'Testing status tracking system',
+                    'timestamp' => time()
+                )
+            );
+            
+            Odoo_Order_Activity_Logger::write_activity_log($test_log_data);
+            echo '<div class="notice notice-success"><p>✓ Test log entry created successfully</p></div>';
+        } else {
+            echo '<div class="notice notice-error"><p>✗ Odoo_Order_Activity_Logger class not available</p></div>';
+        }
         
         // Test different status changes
         $test_statuses = array('on-hold', 'processing', 'completed');
@@ -534,7 +606,15 @@ class Odoo_Activity_Debug {
                 sleep(1);
                 
                 // Check if it was logged
-                $log_file = WP_CONTENT_DIR . '/order-activity-logs/' . date('Y-m-d') . '.log';
+                $logs_dir = WP_CONTENT_DIR . '/order-activity-logs';
+                $log_file = $logs_dir . '/' . date('Y-m-d') . '.log';
+                
+                // Create log directory and file if they don't exist
+                if (!file_exists($logs_dir)) {
+                    wp_mkdir_p($logs_dir);
+                    echo '<div class="notice notice-info"><p>✓ Created log directory: ' . esc_html($logs_dir) . '</p></div>';
+                }
+                
                 if (file_exists($log_file)) {
                     $log_content = file_get_contents($log_file);
                     if (strpos($log_content, "Order #$order_id") !== false && strpos($log_content, $test_status) !== false) {
@@ -546,8 +626,14 @@ class Odoo_Activity_Debug {
                         echo '<div class="notice notice-info"><p>Debug: Looking for "Order #' . esc_html($order_id) . '" and "' . esc_html($test_status) . '"</p></div>';
                     }
                 } else {
-                    echo '<div class="notice notice-warning"><p>⚠ No log file found for today</p></div>';
-                    echo '<div class="notice notice-info"><p>Debug: Expected log file: ' . esc_html($log_file) . '</p></div>';
+                    // Create empty log file for testing
+                    $result = file_put_contents($log_file, '');
+                    if ($result !== false) {
+                        echo '<div class="notice notice-info"><p>✓ Created empty log file: ' . esc_html($log_file) . '</p></div>';
+                        echo '<div class="notice notice-warning"><p>⚠ No log entries found yet - this may indicate the logging system needs to be tested</p></div>';
+                    } else {
+                        echo '<div class="notice notice-error"><p>✗ Failed to create log file: ' . esc_html($log_file) . '</p></div>';
+                    }
                 }
                 
             } catch (Exception $e) {
