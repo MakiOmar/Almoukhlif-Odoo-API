@@ -10,6 +10,11 @@ defined('ABSPATH') || die;
 class Odoo_Hooks {
     
     /**
+     * Store original order status for comparison
+     */
+    private static $original_order_statuses = array();
+    
+    /**
      * Initialize all hooks
      */
     public static function init() {
@@ -31,6 +36,10 @@ class Odoo_Hooks {
         
         // Hook into REST API to catch order status changes via API
         add_action('rest_api_init', array(__CLASS__, 'hook_rest_api_status_changes'));
+        
+        // Hook into WooCommerce order save to catch ALL order changes including update_status()
+        add_action('woocommerce_before_shop_order_object_save', array(__CLASS__, 'on_before_order_save'), 10, 2);
+        add_action('woocommerce_after_shop_order_object_save', array(__CLASS__, 'on_after_order_save'), 10, 2);
         
         // Admin hooks
         add_action('woocommerce_admin_order_data_after_billing_address', array('Odoo_Helpers', 'display_odoo_order_id_in_admin'), 10, 1);
@@ -151,6 +160,70 @@ class Odoo_Hooks {
         }
         
         Odoo_Helpers::update_odoo_order_status(array($post_id), $new_status);
+    }
+    
+    /**
+     * Store original order status before save
+     */
+    public static function on_before_order_save($order, $data_store) {
+        // Only process if this is a valid order
+        if (!$order || !is_a($order, 'WC_Order')) {
+            return;
+        }
+        
+        $order_id = $order->get_id();
+        
+        // Store the original status before any changes
+        $original_status = get_post_status($order_id);
+        $original_status = str_replace('wc-', '', $original_status);
+        
+        self::$original_order_statuses[$order_id] = $original_status;
+    }
+    
+    /**
+     * Handle WooCommerce order object save to catch ALL order changes including update_status()
+     * This hook fires after any order object is saved, including status changes
+     */
+    public static function on_after_order_save($order, $data_store) {
+        // Only process if this is a valid order
+        if (!$order || !is_a($order, 'WC_Order')) {
+            return;
+        }
+        
+        $order_id = $order->get_id();
+        
+        // Get the current status
+        $current_status = $order->get_status();
+        
+        // Get the original status we stored before the save
+        $original_status = isset(self::$original_order_statuses[$order_id]) ? self::$original_order_statuses[$order_id] : null;
+        
+        // Clean up the stored status
+        unset(self::$original_order_statuses[$order_id]);
+        
+        // Only proceed if we have an original status and it's different
+        if ($original_status === null || $original_status === $current_status) {
+            return;
+        }
+        
+        // Log this status change through our activity logger
+        if (class_exists('Odoo_Order_Activity_Logger')) {
+            Odoo_Order_Activity_Logger::log_order_status_change($order_id, $original_status, $current_status, $order);
+        }
+        
+        // Handle the same logic as on_order_status_changed
+        if ('cancelled' === $current_status || 'was-canceled' === $current_status || 'wc-cancelled' === $current_status || 'custom-failed' === $current_status || 'failed' === $current_status) {
+            $odoo_order_id = get_post_meta($order_id, 'odoo_order', true);
+            if ($odoo_order_id) {
+                Odoo_Helpers::cancel_odoo_order($odoo_order_id, $order_id);
+            }
+        }
+
+        if ('international-shi' === $current_status || 'was-shipped' === $current_status || 'received' === $current_status) {
+            Odoo_Helpers::validate_order_delivery_on_completion($order_id);
+        }
+        
+        Odoo_Helpers::update_odoo_order_status(array($order_id), $current_status);
     }
     
     /**

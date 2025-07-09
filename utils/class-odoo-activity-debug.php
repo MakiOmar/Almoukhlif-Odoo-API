@@ -541,9 +541,13 @@ class Odoo_Activity_Debug {
                         echo '<div class="notice notice-success"><p>✓ Status change was logged successfully</p></div>';
                     } else {
                         echo '<div class="notice notice-warning"><p>⚠ Status change may not have been logged</p></div>';
+                        echo '<div class="notice notice-info"><p>Debug: Checking log file: ' . esc_html($log_file) . '</p></div>';
+                        echo '<div class="notice notice-info"><p>Debug: Log content length: ' . strlen($log_content) . ' characters</p></div>';
+                        echo '<div class="notice notice-info"><p>Debug: Looking for "Order #' . esc_html($order_id) . '" and "' . esc_html($test_status) . '"</p></div>';
                     }
                 } else {
                     echo '<div class="notice notice-warning"><p>⚠ No log file found for today</p></div>';
+                    echo '<div class="notice notice-info"><p>Debug: Expected log file: ' . esc_html($log_file) . '</p></div>';
                 }
                 
             } catch (Exception $e) {
