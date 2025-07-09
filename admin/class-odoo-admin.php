@@ -30,6 +30,9 @@ class Odoo_Admin {
         
         // Handle admin actions
         add_action('admin_init', array(__CLASS__, 'handle_admin_actions'));
+        
+        // Initialize activity debug
+        add_action('admin_init', array(__CLASS__, 'init_activity_debug'));
     }
     
     /**
@@ -334,6 +337,29 @@ class Odoo_Admin {
             // Redirect back with success message
             wp_redirect(add_query_arg('cache_cleared', '1', remove_query_arg(array('action', '_wpnonce'))));
             exit;
+        }
+    }
+    
+    /**
+     * Initialize activity debug functionality
+     */
+    public static function init_activity_debug() {
+        // Only load for administrators
+        if (!current_user_can('manage_options')) {
+            return;
+        }
+        
+        // Load debug class if not already loaded
+        if (!class_exists('Odoo_Activity_Debug')) {
+            $activity_debug_file = plugin_dir_path(__FILE__) . '../utils/class-odoo-activity-debug.php';
+            if (file_exists($activity_debug_file)) {
+                require_once $activity_debug_file;
+            }
+        }
+        
+        // Initialize debug functionality
+        if (class_exists('Odoo_Activity_Debug')) {
+            Odoo_Activity_Debug::init();
         }
     }
 } 

@@ -30,11 +30,7 @@ try {
         require_once $activity_logger_file;
     }
     
-    // Load activity debug class
-    $activity_debug_file = plugin_dir_path(__FILE__) . 'utils/class-odoo-activity-debug.php';
-    if (file_exists($activity_debug_file)) {
-        require_once $activity_debug_file;
-    }
+    // Activity debug class will be loaded via admin_init hook when needed
     
     // Initialize core
     if (class_exists('Odoo_Core')) {
@@ -53,10 +49,8 @@ try {
         }
     }
     
-    // Initialize activity debug
-    if (class_exists('Odoo_Activity_Debug')) {
-        Odoo_Activity_Debug::init();
-    }
+    // Initialize activity debug (will be done later via hooks)
+    // Odoo_Activity_Debug::init() is called via admin_init hook
     
     // Initialize hooks
     $hooks_file = plugin_dir_path(__FILE__) . 'hooks/class-odoo-hooks.php';

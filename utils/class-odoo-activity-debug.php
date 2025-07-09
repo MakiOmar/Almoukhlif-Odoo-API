@@ -16,15 +16,18 @@ class Odoo_Activity_Debug {
      */
     public static function init() {
         // Add debug menu item for administrators
-        if (current_user_can('manage_options')) {
-            add_action('admin_menu', array(__CLASS__, 'add_debug_menu'));
-        }
+        add_action('admin_menu', array(__CLASS__, 'add_debug_menu'));
     }
     
     /**
      * Add debug menu
      */
     public static function add_debug_menu() {
+        // Only add menu for administrators
+        if (!current_user_can('manage_options')) {
+            return;
+        }
+        
         add_submenu_page(
             'tools.php',
             'Odoo Activity Debug',
@@ -39,6 +42,7 @@ class Odoo_Activity_Debug {
      * Render debug page
      */
     public static function render_debug_page() {
+        // Double-check permissions
         if (!current_user_can('manage_options')) {
             wp_die(__('You do not have sufficient permissions to access this page.'));
         }
