@@ -31,8 +31,8 @@ class Odoo_Admin {
         // Handle admin actions
         add_action('admin_init', array(__CLASS__, 'handle_admin_actions'));
         
-        // Initialize activity debug
-        add_action('admin_init', array(__CLASS__, 'init_activity_debug'));
+        // Initialize activity debug (must be before admin_menu hook)
+        add_action('admin_menu', array(__CLASS__, 'init_activity_debug'), 5);
     }
     
     /**
@@ -93,6 +93,18 @@ class Odoo_Admin {
             'order-activity-logs',
             array(__CLASS__, 'render_order_activity_logs_page')
         );
+        
+        // Add debug page for administrators
+        if (current_user_can('manage_options')) {
+            add_submenu_page(
+                'odoo-orders',
+                'Odoo Activity Debug',
+                'Debug Tools',
+                'manage_options',
+                'odoo-activity-debug',
+                array(__CLASS__, 'render_debug_page')
+            );
+        }
     }
     
     /**
@@ -360,6 +372,34 @@ class Odoo_Admin {
         // Initialize debug functionality
         if (class_exists('Odoo_Activity_Debug')) {
             Odoo_Activity_Debug::init();
+        }
+    }
+    
+    /**
+     * Render debug page
+     */
+    public static function render_debug_page() {
+        // Check permissions
+        if (!current_user_can('manage_options')) {
+            wp_die(__('You do not have sufficient permissions to access this page.'));
+        }
+        
+        // Load debug class if not already loaded
+        if (!class_exists('Odoo_Activity_Debug')) {
+            $activity_debug_file = ODOO_PLUGIN_DIR . 'utils/class-odoo-activity-debug.php';
+            if (file_exists($activity_debug_file)) {
+                require_once $activity_debug_file;
+            }
+        }
+        
+        // Render debug page
+        if (class_exists('Odoo_Activity_Debug')) {
+            Odoo_Activity_Debug::render_debug_page();
+        } else {
+            echo '<div class="wrap">';
+            echo '<h1>Odoo Activity Debug</h1>';
+            echo '<div class="notice notice-error"><p>Debug class not available.</p></div>';
+            echo '</div>';
         }
     }
 } 

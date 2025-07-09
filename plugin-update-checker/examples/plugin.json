@@ -1,6 +1,6 @@
  {
  	"name" : "Al-Mokhlifoud Odoo API",
- 	"version" : "1.227",
+ 	"version" : "1.228",
  	"download_url" : "https://github.com/MakiOmar/Almoukhlif-Odoo-API/archive/refs/heads/master.zip",
  	"sections" : {
  		"description" : "Al-Mokhlifoud odoo integration"
