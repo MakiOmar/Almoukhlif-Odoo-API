@@ -129,7 +129,7 @@ class Odoo_Response {
         $result = ['success' => false, 'message' => ''];
 
         // Case 1: Order failed in Odoo
-        if (isset($data->ID) && $data->ID === false && 
+        if (isset($data->ID) && ($data->ID === false || $data->ID === null || $data->ID === '') && 
             isset($data->StatusDescription) && $data->StatusDescription === 'Failed') {
             
             // Special case: "already exists" is treated as success
