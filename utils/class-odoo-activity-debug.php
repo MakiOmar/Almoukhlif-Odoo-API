@@ -52,6 +52,9 @@ class Odoo_Activity_Debug {
             self::clear_logs();
         }
         
+        // Display order status data test
+        self::test_order_status_data();
+        
         ?>
         <div class="wrap">
             <h1><?php _e('Odoo Activity Debug', 'text-domain'); ?></h1>
@@ -243,6 +246,39 @@ class Odoo_Activity_Debug {
         } else {
             echo '<div class="notice notice-error"><p>' . __('Failed to create test log entry.', 'text-domain') . '</p></div>';
         }
+    }
+    
+    /**
+     * Test order status data structure
+     */
+    private static function test_order_status_data() {
+        echo '<div class="card">';
+        echo '<h2>' . __('Order Status Data Test', 'text-domain') . '</h2>';
+        
+        // Get sample order statuses
+        $statuses = wc_get_order_statuses();
+        $sample_statuses = array_slice($statuses, 0, 5, true);
+        
+        echo '<p>' . __('Sample order status data structure that will be sent to Odoo:', 'text-domain') . '</p>';
+        echo '<table class="form-table">';
+        echo '<tr><th>' . __('Status Code', 'text-domain') . '</th><th>' . __('Status Label', 'text-domain') . '</th><th>' . __('Data Sent to Odoo', 'text-domain') . '</th></tr>';
+        
+        foreach ($sample_statuses as $status_code => $status_label) {
+            $clean_status_code = str_replace('wc-', '', $status_code);
+            $data_structure = array(
+                'wc_order_status' => $status_label,
+                'wc_order_status_code' => $clean_status_code
+            );
+            
+            echo '<tr>';
+            echo '<td><code>' . esc_html($clean_status_code) . '</code></td>';
+            echo '<td>' . esc_html($status_label) . '</td>';
+            echo '<td><pre>' . esc_html(json_encode($data_structure, JSON_PRETTY_PRINT)) . '</pre></td>';
+            echo '</tr>';
+        }
+        
+        echo '</table>';
+        echo '</div>';
     }
     
     /**

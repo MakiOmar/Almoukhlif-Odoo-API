@@ -90,8 +90,17 @@ The plugin requires the following Odoo settings to be configured:
 
 1. **Order Creation**: When a WooCommerce order is created, it's automatically sent to Odoo
 2. **Stock Validation**: Before adding products to cart, stock is validated against Odoo
-3. **Status Updates**: Order status changes are synchronized between systems
+3. **Status Updates**: Order status changes are synchronized between systems (both status label and status code)
 4. **Error Handling**: Failed orders are tracked and can be retried
+
+### **Order Status Synchronization**
+
+The plugin sends both the order status label and status code to Odoo:
+
+- **`wc_order_status`**: Human-readable status label (e.g., "Processing", "Completed", "Cancelled")
+- **`wc_order_status_code`**: Machine-readable status code (e.g., "processing", "completed", "cancelled")
+
+This dual approach ensures that Odoo receives both the user-friendly status name and the programmatic status identifier for better integration and processing.
 
 ## 📊 Admin Interface
 

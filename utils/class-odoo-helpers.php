@@ -198,6 +198,7 @@ class Odoo_Helpers {
             $order_data = array(
                 'RequestID'       => $odoo_order_id,
                 'wc_order_status' => $status_label,
+                'wc_order_status_code' => $order_status,
                 'modified_date' => current_time('Y-m-d H:i:s'),
             );
 

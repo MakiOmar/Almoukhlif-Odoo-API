@@ -215,6 +215,7 @@ class Odoo_Orders {
                 'order_line'      => array(),
                 'payment_method'  => $order->get_payment_method_title(),
                 'wc_order_status' => wc_get_order_statuses()["wc-$order_status"],
+                'wc_order_status_code' => $order_status,
                 'is_vat_exmpt'    => $is_gulf,
                 'created_date'    => $order->get_date_created() ? $order->get_date_created()->date('Y-m-d H:i:s') : null,
             );
