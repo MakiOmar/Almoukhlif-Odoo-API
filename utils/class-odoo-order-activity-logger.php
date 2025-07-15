@@ -58,6 +58,18 @@ class Odoo_Order_Activity_Logger {
      * @param WC_Order $order Order object
      */
     public static function log_order_status_change($order_id, $old_status, $new_status, $order) {
+        // Validate inputs to prevent conflicts with other plugins
+        if (!$order_id || !is_numeric($order_id)) {
+            return;
+        }
+        
+        if (!is_string($old_status) || !is_string($new_status)) {
+            return;
+        }
+        
+        if (!$order || !is_a($order, 'WC_Order')) {
+            return;
+        }
         $activity_data = array(
             'order_id' => $order_id,
             'activity_type' => 'status_change',
@@ -222,8 +234,18 @@ class Odoo_Order_Activity_Logger {
      * 
      * @param array $actions Actions array
      * @param WC_Order $order Order object
+     * @return array Actions array (unchanged)
      */
     public static function log_admin_order_actions($actions, $order) {
+        // Validate inputs to prevent conflicts
+        if (!is_array($actions)) {
+            return array();
+        }
+        
+        if (!$order || !is_a($order, 'WC_Order')) {
+            return $actions;
+        }
+        
         $activity_data = array(
             'order_id' => $order->get_id(),
             'activity_type' => 'admin_action_viewed',
@@ -237,6 +259,9 @@ class Odoo_Order_Activity_Logger {
         );
         
         self::write_activity_log($activity_data);
+        
+        // Always return the actions array unchanged
+        return $actions;
     }
     
     /**
@@ -361,6 +386,11 @@ class Odoo_Order_Activity_Logger {
      * @param array $activity_data Activity data to log
      */
     public static function write_activity_log($activity_data) {
+        // Validate input to prevent conflicts
+        if (!is_array($activity_data)) {
+            return;
+        }
+        
         // Create logs directory if it doesn't exist
         $logs_dir = WP_CONTENT_DIR . '/order-activity-logs';
         if (!file_exists($logs_dir)) {

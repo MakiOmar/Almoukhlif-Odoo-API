@@ -23,6 +23,9 @@ class Odoo_Hooks {
             Odoo_Order_Activity_Logger::init();
         }
         
+        // Add compatibility fix for WooCommerce Order Status Manager plugin
+        add_action('init', array(__CLASS__, 'add_order_status_manager_compatibility'), 5);
+        
         // Stock validation hooks
         add_filter('woocommerce_add_to_cart_validation', array('Odoo_Stock', 'check_stock_before_add_to_cart'), 10, 5);
         
@@ -48,9 +51,9 @@ class Odoo_Hooks {
         // AJAX hooks
         add_action('wp_ajax_sync_order_to_odoo', array(__CLASS__, 'handle_sync_ajax'));
         
-        // Bulk actions
-        add_filter('bulk_actions-edit-shop_order', array(__CLASS__, 'register_bulk_action'));
-        add_filter('handle_bulk_actions-edit-shop_order', array(__CLASS__, 'handle_bulk_action'), 10, 3);
+        // Bulk actions - use lower priority to avoid conflicts with other plugins
+        add_filter('bulk_actions-edit-shop_order', array(__CLASS__, 'register_bulk_action'), 20);
+        add_filter('handle_bulk_actions-edit-shop_order', array(__CLASS__, 'handle_bulk_action'), 20, 3);
         add_action('admin_notices', array(__CLASS__, 'display_bulk_action_notice'));
         
         // Stock hooks
@@ -97,10 +100,20 @@ class Odoo_Hooks {
      * Handle order status changes
      */
     public static function on_order_status_changed($order_id, $old_status, $new_status) {
+        // Validate inputs to prevent conflicts with other plugins
+        if (!$order_id || !is_numeric($order_id)) {
+            return;
+        }
+        
+        if (!is_string($old_status) || !is_string($new_status)) {
+            return;
+        }
+        
         // Debug logging
         if (function_exists('teamlog')) {
             teamlog("Order status changed hook - Order #$order_id: $old_status -> $new_status");
         }
+        
         // Check if the new status is 'cancelled'.
         if ('cancelled' === $new_status || 'was-canceled' === $new_status || 'wc-cancelled' === $new_status || 'custom-failed' === $new_status || 'failed' === $new_status) {
             $odoo_order_id = get_post_meta($order_id, 'odoo_order', true);
@@ -121,6 +134,15 @@ class Odoo_Hooks {
      * This hook catches changes that might bypass the standard WooCommerce hooks
      */
     public static function on_post_updated($post_id, $post_after, $post_before) {
+        // Validate inputs to prevent conflicts with other plugins
+        if (!$post_id || !is_numeric($post_id)) {
+            return;
+        }
+        
+        if (!$post_after || !is_object($post_after) || !$post_before || !is_object($post_before)) {
+            return;
+        }
+        
         // Debug logging
         if (function_exists('teamlog')) {
             teamlog("Post updated hook - Post #$post_id: {$post_before->post_status} -> {$post_after->post_status}");
@@ -186,6 +208,11 @@ class Odoo_Hooks {
             return;
         }
         
+        // Additional validation to prevent conflicts
+        if (!method_exists($order, 'get_id')) {
+            return;
+        }
+        
         $order_id = $order->get_id();
         
         // Store the original status before any changes
@@ -207,6 +234,11 @@ class Odoo_Hooks {
     public static function on_after_order_save($order, $data_store) {
         // Only process if this is a valid order
         if (!$order || !is_a($order, 'WC_Order')) {
+            return;
+        }
+        
+        // Additional validation to prevent conflicts
+        if (!method_exists($order, 'get_id') || !method_exists($order, 'get_status')) {
             return;
         }
         
@@ -365,8 +397,16 @@ class Odoo_Hooks {
      * Register bulk action
      */
     public static function register_bulk_action($bulk_actions) {
+        // Ensure $bulk_actions is an array to prevent conflicts with other plugins
+        if (!is_array($bulk_actions)) {
+            $bulk_actions = array();
+        }
+        
+        // Add our bulk action
         $bulk_actions['send_to_odoo'] = 'إرسال إلى أودو';
-        return $bulk_actions;
+        
+        // Ensure we always return an array
+        return is_array($bulk_actions) ? $bulk_actions : array();
     }
     
     /**
@@ -497,6 +537,25 @@ class Odoo_Hooks {
         if ($order->get_status() == 'pending') {
             remove_action('woocommerce_order_status_pending', 'wc_maybe_increase_stock_levels');
         }
+    }
+    
+    /**
+     * Add compatibility fix for WooCommerce Order Status Manager plugin
+     */
+    public static function add_order_status_manager_compatibility() {
+        // Check if WooCommerce Order Status Manager is active
+        if (!class_exists('WC_Order_Status_Manager')) {
+            return;
+        }
+        
+        // Add a filter to ensure custom_actions is always an array
+        add_filter('woocommerce_admin_order_actions', function($actions, $order) {
+            // Ensure actions is always an array
+            if (!is_array($actions)) {
+                $actions = array();
+            }
+            return $actions;
+        }, 5, 2);
     }
     
     /**
