@@ -2,11 +2,31 @@
 
 A comprehensive WordPress plugin that integrates WooCommerce with Odoo ERP system for stock validation, order synchronization, and inventory management.
 
-**Current Version: 1.235**
+**Current Version: 1.236**
 
 ## 📋 Changelog
 
-### Version 1.235 (Latest)
+### Version 1.236 (Latest)
+- ✨ **NEW**: Comprehensive Delivery Validation Logging
+  - Added detailed logging for all data sent to delivery validation endpoint
+  - Logs include endpoint URL, Odoo order ID, request data, timestamp, user info, IP address, and request source
+  - Enhanced response logging with response body, status codes, and error details
+  - Multiple logging methods: teamlog, error_log, and Odoo_Logger class
+  - Added client IP detection and request source identification (AJAX, CRON, ADMIN, REST_API, FRONTEND)
+  - Improved debugging and troubleshooting capabilities for delivery validation issues
+- ✨ **NEW**: Enhanced Processed Response Logging with Order IDs
+  - Added order IDs to all processed response logs for better traceability
+  - Enhanced logging in Odoo_Response::process_unified() with order IDs, update status, and AJAX context
+  - Added comprehensive logging for order processing results in both background and AJAX modes
+  - Enhanced retry attempt logging with order IDs and detailed context
+  - Improved debugging capabilities for order processing and response handling
+- 🔧 **ENHANCED**: Better error tracking and debugging
+  - More detailed logging for delivery validation requests and responses
+  - Enhanced error handling with comprehensive context information
+  - Better integration with existing logging systems
+  - Improved order processing result tracking with detailed context
+
+### Version 1.235
 - 🔧 **ENHANCED**: Comprehensive debugging for admin log display
   - Added detailed debug information to Order Activity Logs admin page
   - Shows log directory status, file information, and raw log contents

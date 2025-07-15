@@ -46,6 +46,27 @@ class Odoo_Orders {
         // Process response using unified processor
         $result = Odoo_Response::process_unified($response_data, $orders_temp, $update, false);
 
+        // Log the processing result with order IDs
+        $processing_log_data = array(
+            'order_ids' => $order_ids,
+            'result' => $result,
+            'response_data' => $response_data,
+            'update' => $update,
+            'timestamp' => current_time('Y-m-d H:i:s'),
+            'user_id' => get_current_user_id()
+        );
+        
+        if (function_exists('teamlog')) {
+            teamlog('Order processing result: ' . print_r($processing_log_data, true));
+        } else {
+            error_log('[Odoo Order Processing Result] ' . print_r($processing_log_data, true));
+        }
+
+        // Try to use Odoo_Logger if available
+        if (class_exists('Odoo_Logger')) {
+            Odoo_Logger::log('order_processing_result', $processing_log_data);
+        }
+
         // Trigger activity logger events
         if ($result['success']) {
             foreach ($result['processed_orders'] as $order_id) {
@@ -62,7 +83,27 @@ class Odoo_Orders {
 
         // Handle retries if needed
         if (!$result['success'] && $retry_attempt < 3) {
-            teamlog("Retry attempt for response: " . print_r($response_data, true));
+            $retry_log_data = array(
+                'order_ids' => $order_ids,
+                'retry_attempt' => $retry_attempt,
+                'response_data' => $response_data,
+                'result' => $result,
+                'update' => $update,
+                'timestamp' => current_time('Y-m-d H:i:s'),
+                'user_id' => get_current_user_id()
+            );
+            
+            if (function_exists('teamlog')) {
+                teamlog("Retry attempt for orders: " . print_r($retry_log_data, true));
+            } else {
+                error_log('[Odoo Retry Attempt] ' . print_r($retry_log_data, true));
+            }
+
+            // Try to use Odoo_Logger if available
+            if (class_exists('Odoo_Logger')) {
+                Odoo_Logger::log('retry_attempt', $retry_log_data);
+            }
+            
             return self::handle_retry_attempt($order_ids, $update, $retry_attempt, 'send_batch');
         }
 
@@ -106,6 +147,27 @@ class Odoo_Orders {
         // Process response using unified processor
         $result = Odoo_Response::process_unified($response_data, $orders_temp, false, true);
 
+        // Log the AJAX processing result with order IDs
+        $ajax_processing_log_data = array(
+            'order_ids' => $order_ids,
+            'result' => $result,
+            'response_data' => $response_data,
+            'is_ajax' => true,
+            'timestamp' => current_time('Y-m-d H:i:s'),
+            'user_id' => get_current_user_id()
+        );
+        
+        if (function_exists('teamlog')) {
+            teamlog('AJAX Order processing result: ' . print_r($ajax_processing_log_data, true));
+        } else {
+            error_log('[Odoo AJAX Order Processing Result] ' . print_r($ajax_processing_log_data, true));
+        }
+
+        // Try to use Odoo_Logger if available
+        if (class_exists('Odoo_Logger')) {
+            Odoo_Logger::log('ajax_order_processing_result', $ajax_processing_log_data);
+        }
+
         // Trigger activity logger events
         if ($result['success']) {
             foreach ($result['processed_orders'] as $order_id) {
@@ -122,6 +184,27 @@ class Odoo_Orders {
 
         // Handle retries if needed
         if (!$result['success'] && $retry_attempt < 3) {
+            $ajax_retry_log_data = array(
+                'order_ids' => $order_ids,
+                'retry_attempt' => $retry_attempt,
+                'response_data' => $response_data,
+                'result' => $result,
+                'is_ajax' => true,
+                'timestamp' => current_time('Y-m-d H:i:s'),
+                'user_id' => get_current_user_id()
+            );
+            
+            if (function_exists('teamlog')) {
+                teamlog("AJAX Retry attempt for orders: " . print_r($ajax_retry_log_data, true));
+            } else {
+                error_log('[Odoo AJAX Retry Attempt] ' . print_r($ajax_retry_log_data, true));
+            }
+
+            // Try to use Odoo_Logger if available
+            if (class_exists('Odoo_Logger')) {
+                Odoo_Logger::log('ajax_retry_attempt', $ajax_retry_log_data);
+            }
+            
             return self::handle_retry_attempt($order_ids, false, $retry_attempt, 'send_batch_ajax');
         }
 

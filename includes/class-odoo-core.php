@@ -12,7 +12,7 @@ class Odoo_Core {
     /**
      * Plugin version
      */
-    const VERSION = '1.235';
+    const VERSION = '1.236';
     
     /**
      * Constructor
@@ -87,7 +87,6 @@ class Odoo_Core {
         
         // Load existing files
         $existing_files = [
-            'draft.php',
             'rest-api.php'
         ];
         

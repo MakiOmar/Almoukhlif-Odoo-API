@@ -81,6 +81,30 @@ class Odoo_API {
             ),
         );
 
+        // Log the data being sent to delivery validation endpoint
+        $log_data = array(
+            'endpoint' => $url,
+            'odoo_order_id' => $odoo_order_id,
+            'request_data' => $data,
+            'timestamp' => current_time('Y-m-d H:i:s'),
+            'user_id' => get_current_user_id(),
+            'user_agent' => isset($_SERVER['HTTP_USER_AGENT']) ? $_SERVER['HTTP_USER_AGENT'] : 'Unknown',
+            'ip_address' => self::get_client_ip(),
+            'request_source' => self::get_request_source()
+        );
+
+        // Log using available logging methods
+        if (function_exists('teamlog')) {
+            teamlog('Delivery Validation Request: ' . print_r($log_data, true));
+        } else {
+            error_log('[Odoo Delivery Validation] ' . print_r($log_data, true));
+        }
+
+        // Try to use Odoo_Logger if available
+        if (class_exists('Odoo_Logger')) {
+            Odoo_Logger::log('delivery_validation', $log_data);
+        }
+
         return wp_remote_post(
             $url,
             array(
@@ -92,6 +116,45 @@ class Odoo_API {
                 'timeout' => 20,
             )
         );
+    }
+
+    /**
+     * Get client IP address
+     * 
+     * @return string IP address
+     */
+    private static function get_client_ip() {
+        $ip_keys = array('HTTP_CLIENT_IP', 'HTTP_X_FORWARDED_FOR', 'REMOTE_ADDR');
+        foreach ($ip_keys as $key) {
+            if (array_key_exists($key, $_SERVER) === true) {
+                foreach (explode(',', $_SERVER[$key]) as $ip) {
+                    $ip = trim($ip);
+                    if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE) !== false) {
+                        return $ip;
+                    }
+                }
+            }
+        }
+        return isset($_SERVER['REMOTE_ADDR']) ? $_SERVER['REMOTE_ADDR'] : 'Unknown';
+    }
+
+    /**
+     * Get request source for logging
+     * 
+     * @return string Request source
+     */
+    private static function get_request_source() {
+        if (wp_doing_ajax()) {
+            return 'AJAX';
+        } elseif (wp_doing_cron()) {
+            return 'CRON';
+        } elseif (is_admin()) {
+            return 'ADMIN';
+        } elseif (defined('REST_REQUEST') && REST_REQUEST) {
+            return 'REST_API';
+        } else {
+            return 'FRONTEND';
+        }
     }
     
     /**

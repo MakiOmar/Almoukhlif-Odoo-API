@@ -26,11 +26,29 @@ class Odoo_Response {
             'failed_orders' => []
         ];
 
-        // Log the response for debugging
+        // Log the response for debugging with order IDs
+        $order_ids = array_map(function($order) {
+            return $order->get_id();
+        }, $orders_temp);
+        
+        $log_data = array(
+            'order_ids' => $order_ids,
+            'response_data' => $response_data,
+            'update' => $update,
+            'is_ajax' => $is_ajax,
+            'timestamp' => current_time('Y-m-d H:i:s'),
+            'user_id' => get_current_user_id()
+        );
+        
         if (function_exists('teamlog')) {
-            teamlog('Processed response: ' . print_r($response_data, true));
+            teamlog('Processed response with order IDs: ' . print_r($log_data, true));
         } else {
-            error_log('Processed response: ' . print_r($response_data, true));
+            error_log('[Odoo Processed Response] ' . print_r($log_data, true));
+        }
+
+        // Try to use Odoo_Logger if available
+        if (class_exists('Odoo_Logger')) {
+            Odoo_Logger::log('processed_response', $log_data);
         }
 
         // Check for basic response structure

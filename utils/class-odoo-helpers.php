@@ -130,8 +130,26 @@ class Odoo_Helpers {
         // Send data to Odoo API using wp_remote_post.
         $response = Odoo_API::validate_delivery($odoo_order_id, $token);
         
+        // Log the response data
+        $response_log_data = array(
+            'order_id' => $order_id,
+            'odoo_order_id' => $odoo_order_id,
+            'response' => $response,
+            'response_body' => is_wp_error($response) ? $response->get_error_message() : wp_remote_retrieve_body($response),
+            'response_code' => is_wp_error($response) ? 'WP_ERROR' : wp_remote_retrieve_response_code($response),
+            'timestamp' => current_time('Y-m-d H:i:s'),
+            'user_id' => get_current_user_id()
+        );
+        
         if (function_exists('teamlog')) {
-            teamlog('Deliver validation:' . print_r($response, true));
+            teamlog('Delivery Validation Response: ' . print_r($response_log_data, true));
+        } else {
+            error_log('[Odoo Delivery Validation Response] ' . print_r($response_log_data, true));
+        }
+
+        // Try to use Odoo_Logger if available
+        if (class_exists('Odoo_Logger')) {
+            Odoo_Logger::log('delivery_validation_response', $response_log_data);
         }
         
         // Process the response.
