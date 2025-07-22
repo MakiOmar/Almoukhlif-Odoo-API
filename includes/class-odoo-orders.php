@@ -49,6 +49,7 @@ class Odoo_Orders {
         // Log the processing result with order IDs
         $processing_log_data = array(
             'order_ids' => $order_ids,
+            'orders_data' => $orders_data,
             'result' => $result,
             'response_data' => $response_data,
             'update' => $update,
@@ -150,6 +151,7 @@ class Odoo_Orders {
         // Log the AJAX processing result with order IDs
         $ajax_processing_log_data = array(
             'order_ids' => $order_ids,
+            'orders_data' => $orders_data,
             'result' => $result,
             'response_data' => $response_data,
             'is_ajax' => true,
@@ -376,7 +378,7 @@ class Odoo_Orders {
         }
         
         if (function_exists('teamlog')) {
-            teamlog(print_r($orders_data, true));
+            // teamlog(print_r($orders_data, true)); // Removed as orders_data is now logged in the main activity log
         }
     }
     

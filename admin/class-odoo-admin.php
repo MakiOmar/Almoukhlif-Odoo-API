@@ -105,6 +105,9 @@ class Odoo_Admin {
                 array(__CLASS__, 'render_debug_page')
             );
         }
+
+        // Remove Odoo Order Debug submenu page
+        // (No code for Odoo Order Debug page here anymore)
     }
     
     /**

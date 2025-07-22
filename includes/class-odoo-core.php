@@ -12,7 +12,7 @@ class Odoo_Core {
     /**
      * Plugin version
      */
-    const VERSION = '1.237';
+    const VERSION = '1.238';
     
     /**
      * Constructor
@@ -114,13 +114,14 @@ class Odoo_Core {
      * @param string $message Error message
      */
     private function log_error($message) {
+        // Error logging disabled - uncomment the lines below to re-enable
         // Try to use WordPress error log
-        error_log("[Odoo Integration Error] {$message}");
+        // error_log("[Odoo Integration Error] {$message}");
         
         // Try to use teamlog if available
-        if (function_exists('teamlog')) {
-            teamlog("Odoo Integration Error: {$message}");
-        }
+        // if (function_exists('teamlog')) {
+        //     teamlog("Odoo Integration Error: {$message}");
+        // }
     }
     
     /**

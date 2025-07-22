@@ -253,4 +253,30 @@ class Odoo_Helpers {
         
         return true;
     }
+
+    /**
+     * Debug utility: Log order status and order key for a given order ID
+     *
+     * @param int $order_id WooCommerce order ID
+     */
+    public static function debug_order_status_and_key($order_id) {
+        $order = wc_get_order($order_id);
+        if (!$order) {
+            error_log("[Odoo Debug] Order not found: $order_id");
+            return;
+        }
+        $status = $order->get_status();
+        $order_key = get_post_meta($order_id, '_order_key', true);
+        $log_message = sprintf(
+            '[Odoo Debug] Order ID: %d | Status: %s | _order_key: %s',
+            $order_id,
+            $status,
+            $order_key
+        );
+        if (function_exists('teamlog')) {
+            teamlog($log_message);
+        } else {
+            error_log($log_message);
+        }
+    }
 } 
