@@ -381,7 +381,7 @@ class Odoo_Order_Activity_Logger {
     }
     
     /**
-     * Write activity log to file
+     * Write activity log to file with improved hierarchical structure
      * 
      * @param array $activity_data Activity data to log
      */
@@ -391,15 +391,29 @@ class Odoo_Order_Activity_Logger {
             return;
         }
         
-        // Create logs directory if it doesn't exist
+        // Create hierarchical logs directory structure
         $logs_dir = WP_CONTENT_DIR . '/order-activity-logs';
         if (!file_exists($logs_dir)) {
             wp_mkdir_p($logs_dir);
         }
         
-        // Create daily log file
+        // Create date-based folder structure: YYYY/MM/DD/
         $date = current_time('Y-m-d');
-        $log_file = $logs_dir . '/order-activity-' . $date . '.log';
+        $date_parts = explode('-', $date);
+        $year_dir = $logs_dir . '/' . $date_parts[0];
+        $month_dir = $year_dir . '/' . $date_parts[1];
+        $day_dir = $month_dir . '/' . $date_parts[2];
+        
+        // Create directories if they don't exist
+        if (!file_exists($year_dir)) {
+            wp_mkdir_p($year_dir);
+        }
+        if (!file_exists($month_dir)) {
+            wp_mkdir_p($month_dir);
+        }
+        if (!file_exists($day_dir)) {
+            wp_mkdir_p($day_dir);
+        }
         
         // Format log entry
         $log_entry = array(
@@ -414,9 +428,25 @@ class Odoo_Order_Activity_Logger {
             'data' => array_diff_key($activity_data, array_flip(['timestamp', 'activity_type', 'order_id', 'user_id', 'user_info', 'trigger_source', 'ip_address', 'user_agent']))
         );
         
+        // Write to order-specific file for better performance
+        $order_id = $activity_data['order_id'] ?? 'system';
+        $order_log_file = $day_dir . '/order-' . $order_id . '.log';
+        
         // Write to file
         $log_line = json_encode($log_entry) . "\n";
-        file_put_contents($log_file, $log_line, FILE_APPEND | LOCK_EX);
+        file_put_contents($order_log_file, $log_line, FILE_APPEND | LOCK_EX);
+        
+        // Also maintain a daily summary file for quick overview
+        $daily_summary_file = $day_dir . '/daily-summary.log';
+        $summary_entry = array(
+            'timestamp' => $activity_data['timestamp'],
+            'order_id' => $activity_data['order_id'] ?? null,
+            'activity_type' => $activity_data['activity_type'],
+            'user_id' => $activity_data['user_id'],
+            'trigger_source' => $activity_data['trigger_source']
+        );
+        $summary_line = json_encode($summary_entry) . "\n";
+        file_put_contents($daily_summary_file, $summary_line, FILE_APPEND | LOCK_EX);
         
         // Also use teamlog if available
         if (function_exists('teamlog')) {
@@ -543,7 +573,7 @@ class Odoo_Order_Activity_Logger {
     }
     
     /**
-     * Get activity logs for a specific order
+     * Get activity logs for a specific order with improved performance
      * 
      * @param int $order_id Order ID
      * @param string $date Date in Y-m-d format (optional)
@@ -555,14 +585,35 @@ class Odoo_Order_Activity_Logger {
         }
         
         $logs_dir = WP_CONTENT_DIR . '/order-activity-logs';
-        $log_file = $logs_dir . '/order-activity-' . $date . '.log';
+        $date_parts = explode('-', $date);
+        $day_dir = $logs_dir . '/' . $date_parts[0] . '/' . $date_parts[1] . '/' . $date_parts[2];
         
-        if (!file_exists($log_file)) {
+        // Try to get from order-specific file first (much faster)
+        $order_log_file = $day_dir . '/order-' . $order_id . '.log';
+        
+        if (file_exists($order_log_file)) {
+            $logs = array();
+            $lines = file($order_log_file, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+            
+            foreach ($lines as $line) {
+                $log_entry = json_decode($line, true);
+                if ($log_entry) {
+                    $logs[] = $log_entry;
+                }
+            }
+            
+            return $logs;
+        }
+        
+        // Fallback to legacy format if new structure doesn't exist
+        $legacy_log_file = $logs_dir . '/order-activity-' . $date . '.log';
+        
+        if (!file_exists($legacy_log_file)) {
             return array();
         }
         
         $logs = array();
-        $lines = file($log_file, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+        $lines = file($legacy_log_file, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
         
         foreach ($lines as $line) {
             $log_entry = json_decode($line, true);
@@ -575,7 +626,7 @@ class Odoo_Order_Activity_Logger {
     }
     
     /**
-     * Get all activity logs for a date range
+     * Get all activity logs for a date range with improved performance
      * 
      * @param string $start_date Start date in Y-m-d format
      * @param string $end_date End date in Y-m-d format
@@ -589,16 +640,59 @@ class Odoo_Order_Activity_Logger {
         $start = new DateTime($start_date);
         $end = new DateTime($end_date);
         
-        for ($date = $start; $date <= $end; $date->add(new DateInterval('P1D'))) {
-            $log_file = $logs_dir . '/order-activity-' . $date->format('Y-m-d') . '.log';
+        // Check if we have order_id filter for optimized lookup
+        $order_id_filter = isset($filters['order_id']) ? $filters['order_id'] : null;
+        
+        for ($date = clone $start; $date <= $end; $date->add(new DateInterval('P1D'))) {
+            $date_str = $date->format('Y-m-d');
+            $date_parts = explode('-', $date_str);
+            $day_dir = $logs_dir . '/' . $date_parts[0] . '/' . $date_parts[1] . '/' . $date_parts[2];
             
-            if (file_exists($log_file)) {
-                $lines = file($log_file, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
-                
-                foreach ($lines as $line) {
-                    $log_entry = json_decode($line, true);
-                    if ($log_entry && self::matches_filters($log_entry, $filters)) {
-                        $logs[] = $log_entry;
+            // If we have order_id filter, use optimized lookup
+            if ($order_id_filter && file_exists($day_dir)) {
+                $order_log_file = $day_dir . '/order-' . $order_id_filter . '.log';
+                if (file_exists($order_log_file)) {
+                    $lines = file($order_log_file, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+                    foreach ($lines as $line) {
+                        $log_entry = json_decode($line, true);
+                        if ($log_entry && self::matches_filters($log_entry, $filters)) {
+                            $logs[] = $log_entry;
+                        }
+                    }
+                }
+            } else {
+                // Use daily summary file for quick overview or scan all order files
+                $daily_summary_file = $day_dir . '/daily-summary.log';
+                if (file_exists($daily_summary_file)) {
+                    $lines = file($daily_summary_file, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+                    foreach ($lines as $line) {
+                        $summary_entry = json_decode($line, true);
+                        if ($summary_entry && self::matches_filters($summary_entry, $filters)) {
+                            // Get full log entry from order-specific file
+                            $order_log_file = $day_dir . '/order-' . $summary_entry['order_id'] . '.log';
+                            if (file_exists($order_log_file)) {
+                                $order_lines = file($order_log_file, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+                                foreach ($order_lines as $order_line) {
+                                    $log_entry = json_decode($order_line, true);
+                                    if ($log_entry && $log_entry['timestamp'] === $summary_entry['timestamp']) {
+                                        $logs[] = $log_entry;
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    // Fallback to legacy format
+                    $legacy_log_file = $logs_dir . '/order-activity-' . $date_str . '.log';
+                    if (file_exists($legacy_log_file)) {
+                        $lines = file($legacy_log_file, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+                        foreach ($lines as $line) {
+                            $log_entry = json_decode($line, true);
+                            if ($log_entry && self::matches_filters($log_entry, $filters)) {
+                                $logs[] = $log_entry;
+                            }
+                        }
                     }
                 }
             }
@@ -621,5 +715,200 @@ class Odoo_Order_Activity_Logger {
             }
         }
         return true;
+    }
+    
+    /**
+     * Get log file statistics for performance monitoring
+     * 
+     * @param string $date Date in Y-m-d format (optional)
+     * @return array Statistics
+     */
+    public static function get_log_statistics($date = null) {
+        if (!$date) {
+            $date = current_time('Y-m-d');
+        }
+        
+        $logs_dir = WP_CONTENT_DIR . '/order-activity-logs';
+        $date_parts = explode('-', $date);
+        $day_dir = $logs_dir . '/' . $date_parts[0] . '/' . $date_parts[1] . '/' . $date_parts[2];
+        
+        $stats = array(
+            'date' => $date,
+            'new_structure_exists' => file_exists($day_dir),
+            'legacy_structure_exists' => file_exists($logs_dir . '/order-activity-' . $date . '.log'),
+            'order_files_count' => 0,
+            'total_entries' => 0,
+            'total_size' => 0,
+            'performance_improvement' => 'unknown'
+        );
+        
+        if (file_exists($day_dir)) {
+            $order_files = glob($day_dir . '/order-*.log');
+            $stats['order_files_count'] = count($order_files);
+            
+            foreach ($order_files as $file) {
+                $stats['total_size'] += filesize($file);
+                $lines = file($file, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+                $stats['total_entries'] += count($lines);
+            }
+            
+            // Check daily summary
+            $summary_file = $day_dir . '/daily-summary.log';
+            if (file_exists($summary_file)) {
+                $stats['summary_entries'] = count(file($summary_file, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES));
+            }
+        }
+        
+        // Compare with legacy structure
+        $legacy_file = $logs_dir . '/order-activity-' . $date . '.log';
+        if (file_exists($legacy_file)) {
+            $legacy_size = filesize($legacy_file);
+            $legacy_entries = count(file($legacy_file, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES));
+            
+            if ($stats['total_entries'] > 0 && $legacy_entries > 0) {
+                $improvement = (($legacy_entries - $stats['order_files_count']) / $legacy_entries) * 100;
+                $stats['performance_improvement'] = round($improvement, 2) . '% fewer files to scan';
+            }
+        }
+        
+        return $stats;
+    }
+    
+    /**
+     * Migrate legacy log files to new hierarchical structure
+     * 
+     * @param string $date Date to migrate (optional, defaults to today)
+     * @return array Migration results
+     */
+    public static function migrate_legacy_logs($date = null) {
+        if (!$date) {
+            $date = current_time('Y-m-d');
+        }
+        
+        $logs_dir = WP_CONTENT_DIR . '/order-activity-logs';
+        $legacy_file = $logs_dir . '/order-activity-' . $date . '.log';
+        
+        if (!file_exists($legacy_file)) {
+            return array('success' => false, 'message' => 'No legacy log file found for date: ' . $date);
+        }
+        
+        $results = array(
+            'success' => true,
+            'date' => $date,
+            'migrated_entries' => 0,
+            'created_files' => 0,
+            'errors' => array()
+        );
+        
+        $lines = file($legacy_file, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+        
+        foreach ($lines as $line) {
+            $log_entry = json_decode($line, true);
+            if ($log_entry) {
+                // Use the new write method to create hierarchical structure
+                $activity_data = array(
+                    'timestamp' => $log_entry['timestamp'],
+                    'activity_type' => $log_entry['activity_type'],
+                    'order_id' => $log_entry['order_id'],
+                    'user_id' => $log_entry['user_id'],
+                    'user_info' => $log_entry['user_info'],
+                    'trigger_source' => $log_entry['trigger_source'],
+                    'ip_address' => $log_entry['ip_address'],
+                    'user_agent' => $log_entry['user_agent']
+                );
+                
+                // Add any additional data
+                if (isset($log_entry['data'])) {
+                    $activity_data = array_merge($activity_data, $log_entry['data']);
+                }
+                
+                self::write_activity_log($activity_data);
+                $results['migrated_entries']++;
+            }
+        }
+        
+        // Get statistics after migration
+        $stats = self::get_log_statistics($date);
+        $results['created_files'] = $stats['order_files_count'];
+        
+        return $results;
+    }
+    
+    /**
+     * Clean up old log files based on retention policy
+     * 
+     * @param int $days_to_keep Number of days to keep logs (default: 365)
+     * @return array Cleanup results
+     */
+    public static function cleanup_old_logs($days_to_keep = 365) {
+        $logs_dir = WP_CONTENT_DIR . '/order-activity-logs';
+        $cutoff_date = date('Y-m-d', strtotime("-{$days_to_keep} days"));
+        
+        $results = array(
+            'cutoff_date' => $cutoff_date,
+            'deleted_directories' => 0,
+            'deleted_files' => 0,
+            'errors' => array()
+        );
+        
+        // Clean up hierarchical structure
+        if (file_exists($logs_dir)) {
+            $year_dirs = glob($logs_dir . '/[0-9][0-9][0-9][0-9]', GLOB_ONLYDIR);
+            
+            foreach ($year_dirs as $year_dir) {
+                $year = basename($year_dir);
+                $month_dirs = glob($year_dir . '/[0-9][0-9]', GLOB_ONLYDIR);
+                
+                foreach ($month_dirs as $month_dir) {
+                    $month = basename($month_dir);
+                    $day_dirs = glob($month_dir . '/[0-9][0-9]', GLOB_ONLYDIR);
+                    
+                    foreach ($day_dirs as $day_dir) {
+                        $day = basename($day_dir);
+                        $date_str = $year . '-' . $month . '-' . $day;
+                        
+                        if ($date_str < $cutoff_date) {
+                            // Delete entire day directory
+                            $files = glob($day_dir . '/*');
+                            foreach ($files as $file) {
+                                if (unlink($file)) {
+                                    $results['deleted_files']++;
+                                }
+                            }
+                            
+                            if (rmdir($day_dir)) {
+                                $results['deleted_directories']++;
+                            }
+                        }
+                    }
+                    
+                    // Remove empty month directories
+                    if (count(glob($month_dir . '/*')) === 0) {
+                        rmdir($month_dir);
+                    }
+                }
+                
+                // Remove empty year directories
+                if (count(glob($year_dir . '/*')) === 0) {
+                    rmdir($year_dir);
+                }
+            }
+        }
+        
+        // Also clean up legacy files
+        $legacy_files = glob($logs_dir . '/order-activity-*.log');
+        foreach ($legacy_files as $file) {
+            $filename = basename($file);
+            if (preg_match('/order-activity-(\d{4}-\d{2}-\d{2})\.log/', $filename, $matches)) {
+                $file_date = $matches[1];
+                if ($file_date < $cutoff_date) {
+                    if (unlink($file)) {
+                        $results['deleted_files']++;
+                    }
+                }
+            }
+        }
+        
+        return $results;
     }
 } 

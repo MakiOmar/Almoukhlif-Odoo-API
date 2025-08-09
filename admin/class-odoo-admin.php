@@ -94,6 +94,15 @@ class Odoo_Admin {
             array(__CLASS__, 'render_order_activity_logs_page')
         );
         
+        add_submenu_page(
+            'odoo-orders',
+            'Log Performance Manager',
+            'Performance Manager',
+            'manage_woocommerce',
+            'log-performance-manager',
+            array(__CLASS__, 'render_log_performance_manager_page')
+        );
+        
         // Add debug page for administrators
         if (current_user_can('manage_options')) {
             add_submenu_page(
@@ -312,6 +321,16 @@ class Odoo_Admin {
         require_once ODOO_PLUGIN_DIR . 'admin/pages/order-activity-logs.php';
         if (function_exists('display_order_activity_logs_page')) {
             display_order_activity_logs_page();
+        }
+    }
+    
+    /**
+     * Render log performance manager page
+     */
+    public static function render_log_performance_manager_page() {
+        require_once ODOO_PLUGIN_DIR . 'admin/pages/log-performance-manager.php';
+        if (function_exists('display_log_performance_manager_page')) {
+            display_log_performance_manager_page();
         }
     }
     
