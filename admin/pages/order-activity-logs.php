@@ -14,6 +14,11 @@ if (!function_exists('display_order_activity_logs_page')) {
             wp_die(__('You do not have sufficient permissions to access this page.'));
         }
         
+        // Check if filter form was submitted
+        $filter_submitted = isset($_GET['start_date']) || isset($_GET['end_date']) || isset($_GET['order_id']) || 
+                           isset($_GET['activity_type']) || isset($_GET['user_id']) || isset($_GET['trigger_source']) || 
+                           isset($_GET['paged']);
+        
         // Handle date range and filters
         $start_date = isset($_GET['start_date']) ? sanitize_text_field($_GET['start_date']) : date('Y-m-d', strtotime('-1 month'));
         $end_date = isset($_GET['end_date']) ? sanitize_text_field($_GET['end_date']) : date('Y-m-d', strtotime('+1 day'));
@@ -29,9 +34,9 @@ if (!function_exists('display_order_activity_logs_page')) {
         if ($user_id) $filters['user_id'] = $user_id;
         if ($trigger_source) $filters['trigger_source'] = $trigger_source;
         
-        // Get logs
+        // Get logs only if filter was submitted
         $logs = array();
-        if (class_exists('Odoo_Order_Activity_Logger')) {
+        if ($filter_submitted && class_exists('Odoo_Order_Activity_Logger')) {
             $logs = Odoo_Order_Activity_Logger::get_activity_logs($start_date, $end_date, $filters);
             
             // Debug information
@@ -147,19 +152,25 @@ if (!function_exists('display_order_activity_logs_page')) {
             </div>
             
             <!-- Summary -->
-            <div class="notice notice-info">
-                <p>
-                    <?php printf(
-                        __('Showing %d logs from %s to %s', 'text-domain'),
-                        $total_logs,
-                        date('M j, Y', strtotime($start_date)),
-                        date('M j, Y', strtotime($end_date))
-                    ); ?>
-                </p>
-            </div>
+            <?php if ($filter_submitted): ?>
+                <div class="notice notice-info">
+                    <p>
+                        <?php printf(
+                            __('Showing %d logs from %s to %s', 'text-domain'),
+                            $total_logs,
+                            date('M j, Y', strtotime($start_date)),
+                            date('M j, Y', strtotime($end_date))
+                        ); ?>
+                    </p>
+                </div>
+            <?php else: ?>
+                <div class="notice notice-warning">
+                    <p><?php _e('Please use the filters above to search for order activity logs.', 'text-domain'); ?></p>
+                </div>
+            <?php endif; ?>
             
             <!-- Debug Information (for administrators) -->
-            <?php if (current_user_can('manage_options') && isset($debug_info)): ?>
+            <?php if ($filter_submitted && current_user_can('manage_options') && isset($debug_info)): ?>
                 <div class="notice notice-warning">
                     <h4>Debug Information:</h4>
                     <ul>
@@ -218,88 +229,90 @@ if (!function_exists('display_order_activity_logs_page')) {
             <?php endif; ?>
             
             <!-- Logs Table -->
-            <table class="wp-list-table widefat fixed striped">
-                <thead>
-                    <tr>
-                        <th><?php _e('Timestamp', 'text-domain'); ?></th>
-                        <th><?php _e('Order ID', 'text-domain'); ?></th>
-                        <th><?php _e('Activity Type', 'text-domain'); ?></th>
-                        <th><?php _e('User', 'text-domain'); ?></th>
-                        <th><?php _e('Trigger Source', 'text-domain'); ?></th>
-                        <th><?php _e('IP Address', 'text-domain'); ?></th>
-                        <th><?php _e('Details', 'text-domain'); ?></th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <?php if (empty($paginated_logs)): ?>
+            <?php if ($filter_submitted): ?>
+                <table class="wp-list-table widefat fixed striped">
+                    <thead>
                         <tr>
-                            <td colspan="7"><?php _e('No logs found for the selected criteria.', 'text-domain'); ?></td>
+                            <th><?php _e('Timestamp', 'text-domain'); ?></th>
+                            <th><?php _e('Order ID', 'text-domain'); ?></th>
+                            <th><?php _e('Activity Type', 'text-domain'); ?></th>
+                            <th><?php _e('User', 'text-domain'); ?></th>
+                            <th><?php _e('Trigger Source', 'text-domain'); ?></th>
+                            <th><?php _e('IP Address', 'text-domain'); ?></th>
+                            <th><?php _e('Details', 'text-domain'); ?></th>
                         </tr>
-                    <?php else: ?>
-                        <?php foreach ($paginated_logs as $log): ?>
+                    </thead>
+                    <tbody>
+                        <?php if (empty($paginated_logs)): ?>
                             <tr>
-                                <td>
-                                    <?php echo esc_html(date('Y-m-d H:i:s', strtotime($log['timestamp']))); ?>
-                                </td>
-                                <td>
-                                    <?php if ($log['order_id']): ?>
-                                        <a href="<?php echo admin_url('post.php?post=' . $log['order_id'] . '&action=edit'); ?>" target="_blank">
-                                            #<?php echo esc_html($log['order_id']); ?>
-                                        </a>
-                                    <?php else: ?>
-                                        -
-                                    <?php endif; ?>
-                                </td>
-                                <td>
-                                    <span class="activity-type activity-type-<?php echo esc_attr($log['activity_type']); ?>">
-                                        <?php echo esc_html($activity_types[$log['activity_type']] ?? $log['activity_type']); ?>
-                                    </span>
-                                </td>
-                                <td>
-                                    <?php if ($log['user_info']['id']): ?>
-                                        <strong><?php echo esc_html($log['user_info']['display_name']); ?></strong><br>
-                                        <small><?php echo esc_html($log['user_info']['username']); ?></small><br>
-                                        <small><?php echo esc_html(implode(', ', $log['user_info']['roles'])); ?></small>
-                                    <?php else: ?>
-                                        <?php echo esc_html($log['user_info']['display_name']); ?>
-                                    <?php endif; ?>
-                                </td>
-                                <td>
-                                    <span class="trigger-source trigger-source-<?php echo esc_attr(strtolower(str_replace(' ', '-', $log['trigger_source']))); ?>">
-                                        <?php echo esc_html($log['trigger_source']); ?>
-                                    </span>
-                                </td>
-                                <td>
-                                    <?php echo esc_html($log['ip_address']); ?>
-                                </td>
-                                <td>
-                                    <button type="button" class="button button-small" onclick="showLogDetails(<?php echo htmlspecialchars(json_encode($log)); ?>)">
-                                        <?php _e('View Details', 'text-domain'); ?>
-                                    </button>
-                                </td>
+                                <td colspan="7"><?php _e('No logs found for the selected criteria.', 'text-domain'); ?></td>
                             </tr>
-                        <?php endforeach; ?>
-                    <?php endif; ?>
-                </tbody>
-            </table>
-            
-            <!-- Pagination -->
-            <?php if ($total_pages > 1): ?>
-                <div class="tablenav bottom">
-                    <div class="tablenav-pages">
-                        <?php
-                        $page_links = paginate_links(array(
-                            'base' => add_query_arg('paged', '%#%'),
-                            'format' => '',
-                            'prev_text' => __('&laquo;'),
-                            'next_text' => __('&raquo;'),
-                            'total' => $total_pages,
-                            'current' => $current_page
-                        ));
-                        echo $page_links;
-                        ?>
+                        <?php else: ?>
+                            <?php foreach ($paginated_logs as $log): ?>
+                                <tr>
+                                    <td>
+                                        <?php echo esc_html(date('Y-m-d H:i:s', strtotime($log['timestamp']))); ?>
+                                    </td>
+                                    <td>
+                                        <?php if ($log['order_id']): ?>
+                                            <a href="<?php echo admin_url('post.php?post=' . $log['order_id'] . '&action=edit'); ?>" target="_blank">
+                                                #<?php echo esc_html($log['order_id']); ?>
+                                            </a>
+                                        <?php else: ?>
+                                            -
+                                        <?php endif; ?>
+                                    </td>
+                                    <td>
+                                        <span class="activity-type activity-type-<?php echo esc_attr($log['activity_type']); ?>">
+                                            <?php echo esc_html($activity_types[$log['activity_type']] ?? $log['activity_type']); ?>
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <?php if ($log['user_info']['id']): ?>
+                                            <strong><?php echo esc_html($log['user_info']['display_name']); ?></strong><br>
+                                            <small><?php echo esc_html($log['user_info']['username']); ?></small><br>
+                                            <small><?php echo esc_html(implode(', ', $log['user_info']['roles'])); ?></small>
+                                        <?php else: ?>
+                                            <?php echo esc_html($log['user_info']['display_name']); ?>
+                                        <?php endif; ?>
+                                    </td>
+                                    <td>
+                                        <span class="trigger-source trigger-source-<?php echo esc_attr(strtolower(str_replace(' ', '-', $log['trigger_source']))); ?>">
+                                            <?php echo esc_html($log['trigger_source']); ?>
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <?php echo esc_html($log['ip_address']); ?>
+                                    </td>
+                                    <td>
+                                        <button type="button" class="button button-small" onclick="showLogDetails(<?php echo htmlspecialchars(json_encode($log)); ?>)">
+                                            <?php _e('View Details', 'text-domain'); ?>
+                                        </button>
+                                    </td>
+                                </tr>
+                            <?php endforeach; ?>
+                        <?php endif; ?>
+                    </tbody>
+                </table>
+                
+                <!-- Pagination -->
+                <?php if ($total_pages > 1): ?>
+                    <div class="tablenav bottom">
+                        <div class="tablenav-pages">
+                            <?php
+                            $page_links = paginate_links(array(
+                                'base' => add_query_arg('paged', '%#%'),
+                                'format' => '',
+                                'prev_text' => __('&laquo;'),
+                                'next_text' => __('&raquo;'),
+                                'total' => $total_pages,
+                                'current' => $current_page
+                            ));
+                            echo $page_links;
+                            ?>
+                        </div>
                     </div>
-                </div>
+                <?php endif; ?>
             <?php endif; ?>
         </div>
         
