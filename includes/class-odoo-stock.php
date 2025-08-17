@@ -134,7 +134,7 @@ class Odoo_Stock {
             if (function_exists('teamlog')) {
                 teamlog('Failed to update stock in Odoo: Missing authentication token.');
             } else {
-                error_log('Failed to update stock in Odoo: Missing authentication token.');
+                odoo_log('Failed to update stock in Odoo: Missing authentication token.', 'error');
             }
             return;
         }
@@ -145,7 +145,7 @@ class Odoo_Stock {
             if (function_exists('teamlog')) {
                 teamlog('Failed to update stock in Odoo: ' . $response->get_error_message());
             } else {
-                error_log('Failed to update stock in Odoo: ' . $response->get_error_message());
+                odoo_log('Failed to update stock in Odoo: ' . $response->get_error_message(), 'error');
             }
             return;
         }
@@ -171,12 +171,12 @@ class Odoo_Stock {
             } elseif (function_exists('teamlog')) {
                 teamlog('Failed to update stock: Invalid data received from Odoo.');
             } else {
-                error_log('Failed to update stock: Invalid data received from Odoo.');
+                odoo_log('Failed to update stock: Invalid data received from Odoo.', 'error');
             }
         } elseif (function_exists('teamlog')) {
             teamlog('Failed to update stock: Invalid response format from Odoo.');
         } else {
-            error_log('Failed to update stock: Invalid response format from Odoo.');
+            odoo_log('Failed to update stock: Invalid response format from Odoo.', 'error');
         }
     }
 } 

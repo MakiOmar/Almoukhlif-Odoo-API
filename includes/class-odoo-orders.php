@@ -60,7 +60,7 @@ class Odoo_Orders {
         if (function_exists('teamlog')) {
             teamlog('Order processing result: ' . print_r($processing_log_data, true));
         } else {
-            error_log('[Odoo Order Processing Result] ' . print_r($processing_log_data, true));
+            odoo_log('[Odoo Order Processing Result] ' . print_r($processing_log_data, true), 'info');
         }
 
         // Try to use Odoo_Logger if available
@@ -97,7 +97,7 @@ class Odoo_Orders {
             if (function_exists('teamlog')) {
                 teamlog("Retry attempt for orders: " . print_r($retry_log_data, true));
             } else {
-                error_log('[Odoo Retry Attempt] ' . print_r($retry_log_data, true));
+                odoo_log('[Odoo Retry Attempt] ' . print_r($retry_log_data, true), 'warning');
             }
 
             // Try to use Odoo_Logger if available
@@ -162,7 +162,7 @@ class Odoo_Orders {
         if (function_exists('teamlog')) {
             teamlog('AJAX Order processing result: ' . print_r($ajax_processing_log_data, true));
         } else {
-            error_log('[Odoo AJAX Order Processing Result] ' . print_r($ajax_processing_log_data, true));
+            odoo_log('[Odoo AJAX Order Processing Result] ' . print_r($ajax_processing_log_data, true), 'info');
         }
 
         // Try to use Odoo_Logger if available
@@ -199,7 +199,7 @@ class Odoo_Orders {
             if (function_exists('teamlog')) {
                 teamlog("AJAX Retry attempt for orders: " . print_r($ajax_retry_log_data, true));
             } else {
-                error_log('[Odoo AJAX Retry Attempt] ' . print_r($ajax_retry_log_data, true));
+                odoo_log('[Odoo AJAX Retry Attempt] ' . print_r($ajax_retry_log_data, true), 'warning');
             }
 
             // Try to use Odoo_Logger if available

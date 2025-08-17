@@ -43,7 +43,7 @@ class Odoo_Response {
         if (function_exists('teamlog')) {
             teamlog('Processed response with order IDs: ' . print_r($log_data, true));
         } else {
-            error_log('[Odoo Processed Response] ' . print_r($log_data, true));
+            odoo_log('[Odoo Processed Response] ' . print_r($log_data, true), 'info');
         }
 
         // Try to use Odoo_Logger if available

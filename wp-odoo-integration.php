@@ -2,8 +2,8 @@
 
 /**
  * Plugin Name: WordPress/Odoo Integration
- * Description: Integrates WooCommerce with Odoo to validate stock before adding products to the cart. Features improved order activity logging with hierarchical file structure for better performance and clean user interface.
- * Version: 1.241
+ * Description: Integrates WooCommerce with Odoo to validate stock before adding products to the cart. Features improved order activity logging with hierarchical file structure for better performance and clean user interface. Includes dedicated debug logging system with admin interface.
+ * Version: 1.242
  * Author: Mohammad Omar
  *
  * @package Odoo
@@ -19,6 +19,48 @@ define('ODOO_PLUGIN_FILE', __FILE__);
 define('ODOO_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('ODOO_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('ODOO_PLUGIN_BASENAME', plugin_basename(__FILE__));
+
+/**
+ * Custom logging function for Odoo Integration
+ * Logs messages to a dedicated odoo-debug.log file
+ * 
+ * @param string $message Message to log
+ * @param string $level Log level (info, warning, error, debug)
+ * @return void
+ */
+function odoo_log($message, $level = 'info') {
+    // Get WordPress upload directory
+    $upload_dir = wp_upload_dir();
+    $log_dir = $upload_dir['basedir'] . '/odoo-logs';
+    
+    // Create log directory if it doesn't exist
+    if (!file_exists($log_dir)) {
+        wp_mkdir_p($log_dir);
+        
+        // Create .htaccess to protect log files
+        $htaccess_content = "Order deny,allow\nDeny from all";
+        file_put_contents($log_dir . '/.htaccess', $htaccess_content);
+        
+        // Create index.php to prevent directory listing
+        file_put_contents($log_dir . '/index.php', '<?php // Silence is golden');
+    }
+    
+    $log_file = $log_dir . '/odoo-debug.log';
+    
+    // Format the log message
+    $timestamp = current_time('Y-m-d H:i:s');
+    $formatted_message = sprintf('[%s] [%s] %s%s', 
+        $timestamp, 
+        strtoupper($level), 
+        $message,
+        PHP_EOL
+    );
+    
+    // Write to log file
+    file_put_contents($log_file, $formatted_message, FILE_APPEND | LOCK_EX);
+}
+
+
 
 // Initialize the plugin with error handling
 try {
@@ -73,7 +115,7 @@ try {
     
 } catch (Exception $e) {
     // Log the error
-    error_log("[Odoo Integration] Initialization error: " . $e->getMessage());
+    odoo_log("[Odoo Integration] Initialization error: " . $e->getMessage(), 'error');
     
     // Add admin notice
     add_action('admin_notices', function() use ($e) {

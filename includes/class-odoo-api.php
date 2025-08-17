@@ -97,7 +97,7 @@ class Odoo_API {
         if (function_exists('teamlog')) {
             teamlog('Delivery Validation Request: ' . print_r($log_data, true));
         } else {
-            error_log('[Odoo Delivery Validation] ' . print_r($log_data, true));
+            odoo_log('[Odoo Delivery Validation] ' . print_r($log_data, true), 'info');
         }
 
         // Try to use Odoo_Logger if available

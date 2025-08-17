@@ -23,14 +23,15 @@ class Odoo_Logger {
             return;
         }
         
-        // Fallback to WordPress error log
-        $log_message = sprintf('[Odoo Integration] [%s] %s: %s', 
-            strtoupper($level), 
-            current_time('Y-m-d H:i:s'), 
-            $message
-        );
+        // Fallback to custom Odoo logging
+        $log_message = sprintf('[Odoo Integration] %s', $message);
         
-        error_log($log_message);
+        if (function_exists('odoo_log')) {
+            odoo_log($log_message, $level);
+        } else {
+            // Ultimate fallback to WordPress error log
+            error_log($log_message);
+        }
     }
     
     /**

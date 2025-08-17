@@ -113,6 +113,15 @@ class Odoo_Admin {
                 'odoo-activity-debug',
                 array(__CLASS__, 'render_debug_page')
             );
+            
+            add_submenu_page(
+                'odoo-orders',
+                'Odoo Debug Log Viewer',
+                'Debug Log',
+                'manage_options',
+                'odoo-debug-log',
+                array(__CLASS__, 'render_log_viewer_page')
+            );
         }
 
         // Remove Odoo Order Debug submenu page
@@ -423,5 +432,18 @@ class Odoo_Admin {
             echo '<div class="notice notice-error"><p>Debug class not available.</p></div>';
             echo '</div>';
         }
+    }
+    
+    /**
+     * Render log viewer page
+     */
+    public static function render_log_viewer_page() {
+        // Check permissions
+        if (!current_user_can('manage_options')) {
+            wp_die(__('You do not have sufficient permissions to access this page.'));
+        }
+        
+        // Include the log viewer page
+        require_once ODOO_PLUGIN_DIR . 'admin/pages/log-viewer.php';
     }
 } 

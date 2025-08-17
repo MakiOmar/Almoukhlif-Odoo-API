@@ -114,14 +114,15 @@ class Odoo_Core {
      * @param string $message Error message
      */
     private function log_error($message) {
-        // Error logging disabled - uncomment the lines below to re-enable
-        // Try to use WordPress error log
-        // error_log("[Odoo Integration Error] {$message}");
-        
-        // Try to use teamlog if available
-        // if (function_exists('teamlog')) {
-        //     teamlog("Odoo Integration Error: {$message}");
-        // }
+        // Try to use custom Odoo logging first
+        if (function_exists('odoo_log')) {
+            odoo_log("[Odoo Integration Error] {$message}", 'error');
+        } elseif (function_exists('teamlog')) {
+            teamlog("Odoo Integration Error: {$message}");
+        } else {
+            // Fallback to WordPress error log
+            error_log("[Odoo Integration Error] {$message}");
+        }
     }
     
     /**

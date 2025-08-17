@@ -144,7 +144,7 @@ class Odoo_Helpers {
         if (function_exists('teamlog')) {
             teamlog('Delivery Validation Response: ' . print_r($response_log_data, true));
         } else {
-            error_log('[Odoo Delivery Validation Response] ' . print_r($response_log_data, true));
+            odoo_log('[Odoo Delivery Validation Response] ' . print_r($response_log_data, true), 'info');
         }
 
         // Try to use Odoo_Logger if available
@@ -262,7 +262,7 @@ class Odoo_Helpers {
     public static function debug_order_status_and_key($order_id) {
         $order = wc_get_order($order_id);
         if (!$order) {
-            error_log("[Odoo Debug] Order not found: $order_id");
+            odoo_log("[Odoo Debug] Order not found: $order_id", 'warning');
             return;
         }
         $status = $order->get_status();
@@ -276,7 +276,7 @@ class Odoo_Helpers {
         if (function_exists('teamlog')) {
             teamlog($log_message);
         } else {
-            error_log($log_message);
+            odoo_log($log_message, 'debug');
         }
     }
 } 
