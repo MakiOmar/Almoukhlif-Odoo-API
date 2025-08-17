@@ -1,5 +1,36 @@
 # Changelog
 
+## [1.243] - 2024-01-15
+
+### Added
+- **Date-Based Log Rotation**: Implemented automatic log rotation by date to reduce file sizes
+- **Log Cleanup System**: Automatic cleanup of log files older than 30 days
+- **Date Selection in Log Viewer**: Added dropdown to select specific date logs
+- **Performance Optimization**: Cleanup runs only once per day to avoid performance impact
+
+### Changed
+- **Log File Naming**: Log files now use date-based naming (e.g., `odoo-debug-2024-01-15.log`)
+- **Log Viewer Interface**: Updated to show available log files and allow date selection
+- **Log Management**: Clear and download functions now work with specific date files
+- **Plugin Description**: Updated to mention automatic log rotation
+
+### Technical Details
+- **Files Modified**: 
+  - `wp-odoo-integration.php` - Updated logging function with date rotation and cleanup
+  - `admin/pages/log-viewer.php` - Enhanced interface for date-based log viewing
+  - `CHANGELOG.md` - Added v1.243 changelog entry
+
+### Performance
+- Log files are automatically rotated by date
+- Old logs (30+ days) are automatically deleted
+- Cleanup process runs only once per day
+- Individual log files remain manageable in size
+
+### Compatibility
+- Maintains full backward compatibility
+- Existing log files are preserved
+- New logs use date-based naming
+
 ## [1.242] - 2024-01-15
 
 ### Added

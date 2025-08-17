@@ -15,31 +15,49 @@ if (!current_user_can('manage_options')) {
 // Handle log clearing
 if (isset($_POST['clear_log']) && wp_verify_nonce($_POST['_wpnonce'], 'clear_odoo_log')) {
     $upload_dir = wp_upload_dir();
-    $log_file = $upload_dir['basedir'] . '/odoo-logs/odoo-debug.log';
+    $selected_date = isset($_POST['log_date']) ? sanitize_text_field($_POST['log_date']) : current_time('Y-m-d');
+    $log_file = $upload_dir['basedir'] . '/odoo-logs/odoo-debug-' . $selected_date . '.log';
     
     if (file_exists($log_file)) {
         file_put_contents($log_file, '');
-        echo '<div class="notice notice-success"><p>Log file cleared successfully.</p></div>';
+        echo '<div class="notice notice-success"><p>Log file for ' . esc_html($selected_date) . ' cleared successfully.</p></div>';
     }
 }
 
 // Handle log download
 if (isset($_GET['download_log']) && wp_verify_nonce($_GET['_wpnonce'], 'download_odoo_log')) {
     $upload_dir = wp_upload_dir();
-    $log_file = $upload_dir['basedir'] . '/odoo-logs/odoo-debug.log';
+    $selected_date = isset($_GET['log_date']) ? sanitize_text_field($_GET['log_date']) : current_time('Y-m-d');
+    $log_file = $upload_dir['basedir'] . '/odoo-logs/odoo-debug-' . $selected_date . '.log';
     
     if (file_exists($log_file)) {
         header('Content-Type: application/octet-stream');
-        header('Content-Disposition: attachment; filename="odoo-debug-' . date('Y-m-d-H-i-s') . '.log"');
+        header('Content-Disposition: attachment; filename="odoo-debug-' . $selected_date . '.log"');
         header('Content-Length: ' . filesize($log_file));
         readfile($log_file);
         exit;
     }
 }
 
-// Get log file path
+// Get log directory and available log files
 $upload_dir = wp_upload_dir();
-$log_file = $upload_dir['basedir'] . '/odoo-logs/odoo-debug.log';
+$log_dir = $upload_dir['basedir'] . '/odoo-logs';
+
+// Get selected date (default to today)
+$selected_date = isset($_GET['log_date']) ? sanitize_text_field($_GET['log_date']) : current_time('Y-m-d');
+
+// Get all available log files
+$log_files = glob($log_dir . '/odoo-debug-*.log');
+$available_dates = array();
+foreach ($log_files as $file) {
+    if (preg_match('/odoo-debug-(\d{4}-\d{2}-\d{2})\.log$/', $file, $matches)) {
+        $available_dates[] = $matches[1];
+    }
+}
+rsort($available_dates); // Sort dates in descending order
+
+// Get current log file info
+$log_file = $log_dir . '/odoo-debug-' . $selected_date . '.log';
 $log_exists = file_exists($log_file);
 $log_size = $log_exists ? filesize($log_file) : 0;
 $log_size_formatted = size_format($log_size, 2);
@@ -60,14 +78,18 @@ if ($log_exists) {
     
     <div class="odoo-log-info">
         <p>
-            <strong><?php _e('Log File:', 'wp-odoo-integration'); ?></strong> 
-            <code><?php echo esc_html($log_file); ?></code>
+            <strong><?php _e('Log Directory:', 'wp-odoo-integration'); ?></strong> 
+            <code><?php echo esc_html($log_dir); ?></code>
         </p>
         <p>
-            <strong><?php _e('File Size:', 'wp-odoo-integration'); ?></strong> 
-            <?php echo esc_html($log_size_formatted); ?>
+            <strong><?php _e('Available Log Files:', 'wp-odoo-integration'); ?></strong> 
+            <?php echo count($available_dates); ?> files (last 30 days)
+        </p>
+        <p>
+            <strong><?php _e('Current File:', 'wp-odoo-integration'); ?></strong> 
+            <code><?php echo esc_html(basename($log_file)); ?></code>
             <?php if ($log_exists): ?>
-                (<?php echo number_format(count(file($log_file))); ?> lines)
+                (<?php echo esc_html($log_size_formatted); ?>, <?php echo number_format(count(file($log_file))); ?> lines)
             <?php endif; ?>
         </p>
         <p>
@@ -76,14 +98,34 @@ if ($log_exists) {
         </p>
     </div>
     
+    <div class="odoo-log-date-selector">
+        <form method="get" style="display: inline;">
+            <input type="hidden" name="page" value="odoo-debug-log">
+            <label for="log_date"><strong><?php _e('Select Date:', 'wp-odoo-integration'); ?></strong></label>
+            <select name="log_date" id="log_date" onchange="this.form.submit()">
+                <?php foreach ($available_dates as $date): ?>
+                    <option value="<?php echo esc_attr($date); ?>" <?php selected($date, $selected_date); ?>>
+                        <?php echo esc_html($date); ?> (<?php echo esc_html(date('l', strtotime($date))); ?>)
+                    </option>
+                <?php endforeach; ?>
+                <?php if (!in_array($selected_date, $available_dates)): ?>
+                    <option value="<?php echo esc_attr($selected_date); ?>" selected>
+                        <?php echo esc_html($selected_date); ?> (<?php echo esc_html(date('l', strtotime($selected_date))); ?>) - No logs
+                    </option>
+                <?php endif; ?>
+            </select>
+        </form>
+    </div>
+    
     <div class="odoo-log-actions">
         <?php if ($log_exists && $log_size > 0): ?>
             <form method="post" style="display: inline;">
                 <?php wp_nonce_field('clear_odoo_log'); ?>
-                <input type="submit" name="clear_log" class="button button-secondary" value="<?php _e('Clear Log', 'wp-odoo-integration'); ?>" onclick="return confirm('<?php _e('Are you sure you want to clear the log file?', 'wp-odoo-integration'); ?>');">
+                <input type="hidden" name="log_date" value="<?php echo esc_attr($selected_date); ?>">
+                <input type="submit" name="clear_log" class="button button-secondary" value="<?php _e('Clear Log', 'wp-odoo-integration'); ?>" onclick="return confirm('<?php _e('Are you sure you want to clear the log file for this date?', 'wp-odoo-integration'); ?>');">
             </form>
             
-            <a href="<?php echo wp_nonce_url(add_query_arg('download_log', '1'), 'download_odoo_log'); ?>" class="button button-primary">
+            <a href="<?php echo wp_nonce_url(add_query_arg(array('download_log' => '1', 'log_date' => $selected_date)), 'download_odoo_log'); ?>" class="button button-primary">
                 <?php _e('Download Log', 'wp-odoo-integration'); ?>
             </a>
         <?php endif; ?>
@@ -117,6 +159,23 @@ if ($log_exists) {
 
 .odoo-log-info p {
     margin: 5px 0;
+}
+
+.odoo-log-date-selector {
+    background: #f0f0f0;
+    padding: 15px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    margin-bottom: 20px;
+}
+
+.odoo-log-date-selector label {
+    margin-right: 10px;
+}
+
+.odoo-log-date-selector select {
+    min-width: 200px;
+    padding: 5px;
 }
 
 .odoo-log-actions {

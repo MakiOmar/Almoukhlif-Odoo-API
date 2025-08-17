@@ -2,8 +2,8 @@
 
 /**
  * Plugin Name: WordPress/Odoo Integration
- * Description: Integrates WooCommerce with Odoo to validate stock before adding products to the cart. Features improved order activity logging with hierarchical file structure for better performance and clean user interface. Includes dedicated debug logging system with admin interface.
- * Version: 1.242
+ * Description: Integrates WooCommerce with Odoo to validate stock before adding products to the cart. Features improved order activity logging with hierarchical file structure for better performance and clean user interface. Includes dedicated debug logging system with admin interface and automatic log rotation by date.
+ * Version: 1.243
  * Author: Mohammad Omar
  *
  * @package Odoo
@@ -22,7 +22,7 @@ define('ODOO_PLUGIN_BASENAME', plugin_basename(__FILE__));
 
 /**
  * Custom logging function for Odoo Integration
- * Logs messages to a dedicated odoo-debug.log file
+ * Logs messages to date-based log files (e.g., odoo-debug-2024-01-15.log)
  * 
  * @param string $message Message to log
  * @param string $level Log level (info, warning, error, debug)
@@ -45,7 +45,9 @@ function odoo_log($message, $level = 'info') {
         file_put_contents($log_dir . '/index.php', '<?php // Silence is golden');
     }
     
-    $log_file = $log_dir . '/odoo-debug.log';
+    // Create date-based log file name
+    $current_date = current_time('Y-m-d');
+    $log_file = $log_dir . '/odoo-debug-' . $current_date . '.log';
     
     // Format the log message
     $timestamp = current_time('Y-m-d H:i:s');
@@ -58,6 +60,48 @@ function odoo_log($message, $level = 'info') {
     
     // Write to log file
     file_put_contents($log_file, $formatted_message, FILE_APPEND | LOCK_EX);
+    
+    // Clean up old log files (keep only last 30 days)
+    odoo_cleanup_old_logs($log_dir);
+}
+
+/**
+ * Clean up old log files to prevent disk space issues
+ * Keeps only the last 30 days of logs
+ * 
+ * @param string $log_dir Log directory path
+ * @return void
+ */
+function odoo_cleanup_old_logs($log_dir) {
+    // Only run cleanup once per day to avoid performance issues
+    $cleanup_key = 'odoo_log_cleanup_' . current_time('Y-m-d');
+    if (get_transient($cleanup_key)) {
+        return;
+    }
+    
+    // Set cleanup flag for 24 hours
+    set_transient($cleanup_key, true, DAY_IN_SECONDS);
+    
+    // Get all log files
+    $log_files = glob($log_dir . '/odoo-debug-*.log');
+    if (empty($log_files)) {
+        return;
+    }
+    
+    // Calculate cutoff date (30 days ago)
+    $cutoff_date = date('Y-m-d', strtotime('-30 days'));
+    
+    foreach ($log_files as $log_file) {
+        // Extract date from filename
+        if (preg_match('/odoo-debug-(\d{4}-\d{2}-\d{2})\.log$/', $log_file, $matches)) {
+            $file_date = $matches[1];
+            
+            // Delete files older than 30 days
+            if ($file_date < $cutoff_date) {
+                unlink($log_file);
+            }
+        }
+    }
 }
 
 

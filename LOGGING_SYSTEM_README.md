@@ -6,7 +6,11 @@ The Odoo Integration plugin now uses a dedicated logging system that stores all 
 
 ## Log File Location
 
-The log file is stored in: `wp-content/uploads/odoo-logs/odoo-debug.log`
+Log files are stored in: `wp-content/uploads/odoo-logs/`
+
+**File Naming Convention**: `odoo-debug-YYYY-MM-DD.log` (e.g., `odoo-debug-2024-01-15.log`)
+
+**Log Rotation**: New log file created each day automatically
 
 ## Log Format
 
@@ -54,18 +58,21 @@ odoo_log('This is a debug message', 'debug');
 Access the log viewer at: **WordPress Admin → Odoo Orders → Debug Log**
 
 Features:
-- View the last 1000 lines of the log file
-- Download the complete log file
-- Clear the log file
-- Auto-refresh every 30 seconds
-- Syntax highlighting for better readability
+- **Date Selection**: Dropdown to select specific date logs
+- **File Management**: View available log files (last 30 days)
+- **Log Viewing**: View the last 1000 lines of selected date's log file
+- **Download**: Download specific date's log file
+- **Clear**: Clear specific date's log file
+- **Auto-refresh**: Auto-refresh every 30 seconds
+- **Syntax Highlighting**: Better readability with dark theme
 
 ### Log Management
 
 The log viewer provides:
-- **File Information**: Shows log file path, size, and last modified date
-- **Clear Log**: Removes all content from the log file
-- **Download Log**: Downloads the complete log file with timestamp
+- **File Information**: Shows log directory, available files count, and current file details
+- **Date Selection**: Dropdown to browse logs by specific dates
+- **Clear Log**: Removes all content from the selected date's log file
+- **Download Log**: Downloads the selected date's log file
 - **Refresh**: Manually refresh the log viewer
 
 ## Log Categories
@@ -98,9 +105,12 @@ The plugin logs various types of information:
 
 ## Performance Considerations
 
-- Log files are limited to the last 1000 lines in the viewer to prevent memory issues
-- File locking is used to prevent concurrent write issues
-- Log directory is created only when needed
+- **Log Rotation**: New log file created each day to keep individual files manageable
+- **Automatic Cleanup**: Log files older than 30 days are automatically deleted
+- **Daily Cleanup**: Cleanup process runs only once per day to avoid performance impact
+- **Viewer Limits**: Log viewer limited to last 1000 lines to prevent memory issues
+- **File Locking**: Prevents concurrent write issues
+- **Directory Creation**: Log directory created only when needed
 
 ## Troubleshooting
 
@@ -115,9 +125,10 @@ The plugin logs various types of information:
 3. Verify file permissions
 
 ### Large Log Files
-1. Use the "Clear Log" function to reset the log
-2. Consider implementing log rotation for production environments
-3. Monitor log file size regularly
+1. Log files are automatically rotated by date to prevent large single files
+2. Use the "Clear Log" function to reset specific date's log
+3. Old logs (30+ days) are automatically cleaned up
+4. Monitor log directory size regularly
 
 ## Migration from Old System
 
@@ -141,4 +152,16 @@ The logging system can be customized by modifying the `odoo_log()` function in `
 [2024-01-15 10:31:15] [ERROR] Failed to update stock in Odoo: Missing authentication token
 [2024-01-15 10:31:20] [WARNING] [Odoo Retry Attempt] Array ( [retry_attempt] => 1 )
 [2024-01-15 10:31:25] [DEBUG] [Odoo Debug] Order not found: 12346
+```
+
+## File Structure Example
+
+```
+wp-content/uploads/odoo-logs/
+├── .htaccess
+├── index.php
+├── odoo-debug-2024-01-15.log
+├── odoo-debug-2024-01-16.log
+├── odoo-debug-2024-01-17.log
+└── odoo-debug-2024-01-18.log
 ```
