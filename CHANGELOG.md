@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.245] - 2025-10-29
+
+### Changed
+- Disabled order view logging in activity logger to reduce noise in logs
+
+### Technical Details
+- Files Modified:
+  - `utils/class-odoo-order-activity-logger.php` – Commented out `woocommerce_admin_order_actions` hook
+  - `wp-odoo-integration.php` – Bumped version to 1.245
+  - `includes/class-odoo-core.php` – Updated VERSION constant to 1.245
+
 ## [1.244] - 2025-10-29
 
 ### Added
