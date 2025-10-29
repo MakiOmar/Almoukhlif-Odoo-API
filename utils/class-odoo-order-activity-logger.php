@@ -34,8 +34,8 @@ class Odoo_Order_Activity_Logger {
         // Hook into REST API order status changes
         add_action('rest_api_init', array(__CLASS__, 'hook_rest_api_logging'));
         
-        // Hook into admin order actions
-        add_action('woocommerce_admin_order_actions', array(__CLASS__, 'log_admin_order_actions'), 10, 2);
+        // Hook into admin order actions (disabled - don't log order views)
+        // add_action('woocommerce_admin_order_actions', array(__CLASS__, 'log_admin_order_actions'), 10, 2);
         
         // Hook into bulk actions
         add_action('handle_bulk_actions-edit-shop_order', array(__CLASS__, 'log_bulk_action'), 10, 3);
