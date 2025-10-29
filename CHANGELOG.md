@@ -1,5 +1,24 @@
 # Changelog
 
+## [1.244] - 2025-10-29
+
+### Added
+- Direct URL streaming for order activity logs on `order-activity-logs` admin page:
+  - Legacy file: `oa_file=order-activity-YYYY-MM-DD.log`
+  - Per-order: `oa_order_id={id}&oa_date=YYYY-MM-DD`
+  - Daily summary: `oa_summary=1&oa_date=YYYY-MM-DD`
+
+### Changed
+- Removed nonce requirement for direct URL streaming; retains capability checks and strict validation.
+
+### Technical Details
+- Files Modified:
+  - `admin/pages/order-activity-logs.php` – Added chunked streaming handler and validation.
+  - `wp-odoo-integration.php` – Bumped version to 1.244.
+
+### Performance
+- Large logs stream without loading UI or exhausting memory, reducing timeouts.
+
 ## [1.243] - 2024-01-15
 
 ### Added

@@ -14,6 +14,71 @@ if (!function_exists('display_order_activity_logs_page')) {
             wp_die(__('You do not have sufficient permissions to access this page.'));
         }
         
+        // Direct raw file access to avoid timeouts on large files
+        // Supports:
+        // 1) Legacy daily file:  ?page=order-activity-logs&oa_file=order-activity-YYYY-MM-DD.log
+        // 2) Per-order file:     ?page=order-activity-logs&oa_order_id=123&oa_date=YYYY-MM-DD
+        // 3) Daily summary:      ?page=order-activity-logs&oa_summary=1&oa_date=YYYY-MM-DD
+        if (isset($_GET['oa_file']) || isset($_GET['oa_order_id']) || isset($_GET['oa_summary'])) {
+            
+            $base_dir = WP_CONTENT_DIR . '/order-activity-logs';
+            $target = '';
+            
+            // Case 1: Legacy daily file by exact filename
+            if (isset($_GET['oa_file'])) {
+                $filename = basename(sanitize_text_field($_GET['oa_file']));
+                if (!preg_match('/^order-activity-\d{4}-\d{2}-\d{2}\.log$/', $filename)) {
+                    wp_die(__('Invalid log filename.', 'text-domain'));
+                }
+                $target = trailingslashit($base_dir) . $filename;
+            }
+            
+            // Case 2: Per-order file by date and order id
+            if (!$target && isset($_GET['oa_order_id']) && isset($_GET['oa_date'])) {
+                $order_id = intval($_GET['oa_order_id']);
+                $date = sanitize_text_field($_GET['oa_date']);
+                if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) {
+                    wp_die(__('Invalid date format.', 'text-domain'));
+                }
+                $parts = explode('-', $date);
+                $day_dir = $base_dir . '/' . $parts[0] . '/' . $parts[1] . '/' . $parts[2];
+                $target = $day_dir . '/order-' . $order_id . '.log';
+            }
+            
+            // Case 3: Daily summary file by date
+            if (!$target && isset($_GET['oa_summary']) && isset($_GET['oa_date'])) {
+                $date = sanitize_text_field($_GET['oa_date']);
+                if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) {
+                    wp_die(__('Invalid date format.', 'text-domain'));
+                }
+                $parts = explode('-', $date);
+                $day_dir = $base_dir . '/' . $parts[0] . '/' . $parts[1] . '/' . $parts[2];
+                $target = $day_dir . '/daily-summary.log';
+            }
+            
+            if ($target && file_exists($target) && is_readable($target)) {
+                @ob_end_clean();
+                if (!headers_sent()) {
+                    header('Content-Type: text/plain; charset=UTF-8');
+                    header('Content-Length: ' . filesize($target));
+                    header('X-Content-Type-Options: nosniff');
+                    header('Content-Disposition: inline; filename="' . basename($target) . '"');
+                }
+                set_time_limit(0);
+                $fp = fopen($target, 'rb');
+                if ($fp) {
+                    while (!feof($fp)) {
+                        echo fread($fp, 8192);
+                        flush();
+                    }
+                    fclose($fp);
+                }
+                exit;
+            } else if ($target) {
+                wp_die(__('Log file not found or not readable.', 'text-domain'));
+            }
+        }
+        
         // Check if filter form was submitted
         $filter_submitted = isset($_GET['start_date']) || isset($_GET['end_date']) || isset($_GET['order_id']) || 
                            isset($_GET['activity_type']) || isset($_GET['user_id']) || isset($_GET['trigger_source']) || 
