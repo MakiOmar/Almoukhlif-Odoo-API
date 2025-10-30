@@ -2,11 +2,15 @@
 
 A comprehensive WordPress plugin that integrates WooCommerce with Odoo ERP system for stock validation, order synchronization, and inventory management.
 
-**Current Version: 1.237**
+**Current Version: 1.246**
 
 ## 📋 Changelog
 
-### Version 1.237 (Latest)
+### Version 1.246 (Latest)
+- ✨ NEW: Separate Order ID search on Activity Logs (all dates)
+- 🔧 CHANGED: When Order ID is provided, other filters apply to that order regardless of date range; summary reflects mode.
+
+### Version 1.237
 - 🛠️ **FIXED**: Critical WooCommerce Order Status Manager compatibility
   - Fixed fatal error caused by array_merge() conflict with WooCommerce Order Status Manager plugin
   - Added specific compatibility fix to handle plugin's internal bug

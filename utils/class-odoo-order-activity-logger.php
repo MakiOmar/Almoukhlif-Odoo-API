@@ -700,6 +700,67 @@ class Odoo_Order_Activity_Logger {
         
         return $logs;
     }
+	
+	/**
+	 * Get activity logs for a specific order across all dates
+	 *
+	 * Scans the hierarchical logs directory (YYYY/MM/DD) and aggregates
+	 * entries from per-day `order-{id}.log` files. Applies optional
+	 * additional filters like activity_type, user_id, trigger_source.
+	 * Falls back to legacy daily files if present.
+	 *
+	 * @param int $order_id Order ID
+	 * @param array $filters Optional filters to apply on each entry
+	 * @return array Activity logs
+	 */
+	public static function get_activity_logs_for_order_all_dates($order_id, $filters = array()) {
+		$logs = array();
+		$logs_dir = WP_CONTENT_DIR . '/order-activity-logs';
+		
+		if (!is_numeric($order_id) || intval($order_id) <= 0) {
+			return $logs;
+		}
+		$order_id = intval($order_id);
+		
+		// Scan hierarchical structure: /YYYY/MM/DD/order-{id}.log
+		if (file_exists($logs_dir)) {
+			$year_dirs = glob($logs_dir . '/[0-9][0-9][0-9][0-9]', GLOB_ONLYDIR) ?: array();
+			foreach ($year_dirs as $year_dir) {
+				$month_dirs = glob($year_dir . '/[0-9][0-9]', GLOB_ONLYDIR) ?: array();
+				foreach ($month_dirs as $month_dir) {
+					$day_dirs = glob($month_dir . '/[0-9][0-9]', GLOB_ONLYDIR) ?: array();
+					foreach ($day_dirs as $day_dir) {
+						$order_log_file = $day_dir . '/order-' . $order_id . '.log';
+						if (file_exists($order_log_file)) {
+							$lines = file($order_log_file, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+							foreach ($lines as $line) {
+								$log_entry = json_decode($line, true);
+								if ($log_entry && self::matches_filters($log_entry, $filters)) {
+									$logs[] = $log_entry;
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+		
+		// Fallback: scan legacy daily files order-activity-YYYY-MM-DD.log
+		$legacy_files = glob($logs_dir . '/order-activity-*.log') ?: array();
+		foreach ($legacy_files as $legacy_file) {
+			$lines = file($legacy_file, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+			foreach ($lines as $line) {
+				$log_entry = json_decode($line, true);
+				if ($log_entry && isset($log_entry['order_id']) && intval($log_entry['order_id']) === $order_id) {
+					if (self::matches_filters($log_entry, $filters)) {
+						$logs[] = $log_entry;
+					}
+				}
+			}
+		}
+		
+		return $logs;
+	}
     
     /**
      * Check if log entry matches filters

@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.246] - 2025-10-30
+
+### Added
+- Separate Order ID search on Activity Logs page that fetches logs across all dates.
+
+### Changed
+- When searching by Order ID, other filters apply to that order regardless of date range.
+- Summary banner reflects search mode (order-specific vs date-range).
+
+### Technical Details
+- Files Modified:
+  - `admin/pages/order-activity-logs.php` – Added separate Order ID form and branching logic.
+  - `utils/class-odoo-order-activity-logger.php` – Added `get_activity_logs_for_order_all_dates()`.
+  - `wp-odoo-integration.php` – Bumped version to 1.246.
+  - `includes/class-odoo-core.php` – Updated VERSION constant to 1.246.
+
 ## [1.245] - 2025-10-29
 
 ### Changed

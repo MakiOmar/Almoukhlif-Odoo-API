@@ -79,18 +79,20 @@ if (!function_exists('display_order_activity_logs_page')) {
             }
         }
         
-        // Check if filter form was submitted
-        $filter_submitted = isset($_GET['start_date']) || isset($_GET['end_date']) || isset($_GET['order_id']) || 
-                           isset($_GET['activity_type']) || isset($_GET['user_id']) || isset($_GET['trigger_source']) || 
-                           isset($_GET['paged']);
+		// Check if either search-by-id or general filter form was submitted
+		$order_search_id = isset($_GET['search_order_id']) ? intval($_GET['search_order_id']) : 0;
+		$order_search_submitted = $order_search_id > 0;
+		$filter_submitted = $order_search_submitted || isset($_GET['start_date']) || isset($_GET['end_date']) || isset($_GET['order_id']) || 
+						   isset($_GET['activity_type']) || isset($_GET['user_id']) || isset($_GET['trigger_source']) || 
+						   isset($_GET['paged']);
         
-        // Handle date range and filters
-        $start_date = isset($_GET['start_date']) ? sanitize_text_field($_GET['start_date']) : date('Y-m-d', strtotime('-1 month'));
-        $end_date = isset($_GET['end_date']) ? sanitize_text_field($_GET['end_date']) : date('Y-m-d', strtotime('+1 day'));
-        $order_id = isset($_GET['order_id']) ? intval($_GET['order_id']) : '';
-        $activity_type = isset($_GET['activity_type']) ? sanitize_text_field($_GET['activity_type']) : '';
-        $user_id = isset($_GET['user_id']) ? intval($_GET['user_id']) : '';
-        $trigger_source = isset($_GET['trigger_source']) ? sanitize_text_field($_GET['trigger_source']) : '';
+		// Handle date range and filters
+		$start_date = isset($_GET['start_date']) ? sanitize_text_field($_GET['start_date']) : date('Y-m-d', strtotime('-1 month'));
+		$end_date = isset($_GET['end_date']) ? sanitize_text_field($_GET['end_date']) : date('Y-m-d', strtotime('+1 day'));
+		$order_id = isset($_GET['order_id']) ? intval($_GET['order_id']) : '';
+		$activity_type = isset($_GET['activity_type']) ? sanitize_text_field($_GET['activity_type']) : '';
+		$user_id = isset($_GET['user_id']) ? intval($_GET['user_id']) : '';
+		$trigger_source = isset($_GET['trigger_source']) ? sanitize_text_field($_GET['trigger_source']) : '';
         
         // Build filters
         $filters = array();
@@ -99,11 +101,18 @@ if (!function_exists('display_order_activity_logs_page')) {
         if ($user_id) $filters['user_id'] = $user_id;
         if ($trigger_source) $filters['trigger_source'] = $trigger_source;
         
-        // Get logs only if filter was submitted
-        $logs = array();
-        if ($filter_submitted && class_exists('Odoo_Order_Activity_Logger')) {
-            $logs = Odoo_Order_Activity_Logger::get_activity_logs($start_date, $end_date, $filters);
-        }
+		// Get logs depending on mode
+		$logs = array();
+		if ($filter_submitted && class_exists('Odoo_Order_Activity_Logger')) {
+			if ($order_search_submitted) {
+				// Separate order ID search across all dates; don't include order_id in filters since file is scoped per order
+				$filters_for_order = $filters;
+				unset($filters_for_order['order_id']);
+				$logs = Odoo_Order_Activity_Logger::get_activity_logs_for_order_all_dates($order_search_id, $filters_for_order);
+			} else {
+				$logs = Odoo_Order_Activity_Logger::get_activity_logs($start_date, $end_date, $filters);
+			}
+		}
         
         // Pagination
         $per_page = 50;
@@ -145,10 +154,21 @@ if (!function_exists('display_order_activity_logs_page')) {
             
             <!-- Filters -->
             <div class="tablenav top">
-                <form method="get" action="">
-                    <input type="hidden" name="page" value="order-activity-logs">
-                    
-                    <div class="alignleft actions">
+				<form method="get" action="">
+					<input type="hidden" name="page" value="order-activity-logs">
+					
+					<div class="alignleft actions">
+						<label for="search_order_id"><?php _e('Search by Order ID:', 'text-domain'); ?></label>
+						<input type="number" id="search_order_id" name="search_order_id" value="<?php echo esc_attr($order_search_id); ?>" placeholder="Order ID">
+						<input type="submit" class="button" value="<?php _e('Search', 'text-domain'); ?>">
+						<a href="?page=order-activity-logs" class="button"><?php _e('Clear', 'text-domain'); ?></a>
+					</div>
+				</form>
+				
+				<form method="get" action="" style="margin-top:10px;">
+					<input type="hidden" name="page" value="order-activity-logs">
+					
+					<div class="alignleft actions">
                         <label for="start_date"><?php _e('Start Date:', 'text-domain'); ?></label>
                         <input type="date" id="start_date" name="start_date" value="<?php echo esc_attr($start_date); ?>">
                         
@@ -178,23 +198,31 @@ if (!function_exists('display_order_activity_logs_page')) {
                             <?php endforeach; ?>
                         </select>
                         
-                        <input type="submit" class="button" value="<?php _e('Filter', 'text-domain'); ?>">
-                        <a href="?page=order-activity-logs" class="button"><?php _e('Clear Filters', 'text-domain'); ?></a>
+						<input type="submit" class="button" value="<?php _e('Filter', 'text-domain'); ?>">
+						<a href="?page=order-activity-logs" class="button"><?php _e('Clear Filters', 'text-domain'); ?></a>
                     </div>
                 </form>
             </div>
             
             <!-- Summary -->
-            <?php if ($filter_submitted): ?>
+			<?php if ($filter_submitted): ?>
                 <div class="notice notice-info">
-                    <p>
-                        <?php printf(
-                            __('Showing %d logs from %s to %s', 'text-domain'),
-                            $total_logs,
-                            date('M j, Y', strtotime($start_date)),
-                            date('M j, Y', strtotime($end_date))
-                        ); ?>
-                    </p>
+					<p>
+						<?php if ($order_search_submitted): ?>
+							<?php printf(
+								__('Showing %d logs for Order #%d (all dates)', 'text-domain'),
+								$total_logs,
+								$order_search_id
+							); ?>
+						<?php else: ?>
+							<?php printf(
+								__('Showing %d logs from %s to %s', 'text-domain'),
+								$total_logs,
+								date('M j, Y', strtotime($start_date)),
+								date('M j, Y', strtotime($end_date))
+							); ?>
+						<?php endif; ?>
+					</p>
                 </div>
             <?php else: ?>
                 <div class="notice notice-warning">
