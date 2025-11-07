@@ -1,5 +1,19 @@
 # Changelog
 
+# Changelog
+
+## [1.247] - 2025-11-07
+
+### Changed
+- Removed remaining `error_log()` fallbacks so logs no longer hit the default WordPress debug log.
+- Added `odoo_logger_missing_handler` action hook for custom fallback handlers when `odoo_log()` and `teamlog()` are unavailable.
+
+### Technical Details
+- Files Modified:
+  - `utils/class-odoo-logger.php` – Removed `error_log()` fallback and added action hook.
+  - `includes/class-odoo-core.php` – Updated error logging to use new fallback chain and bumped version constant to 1.247.
+  - `wp-odoo-integration.php` – Bumped version to 1.247.
+
 ## [1.246] - 2025-10-30
 
 ### Added

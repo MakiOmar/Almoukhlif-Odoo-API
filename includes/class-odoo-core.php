@@ -12,7 +12,7 @@ class Odoo_Core {
     /**
      * Plugin version
      */
-    const VERSION = '1.246';
+    const VERSION = '1.247';
     
     /**
      * Constructor
@@ -114,14 +114,26 @@ class Odoo_Core {
      * @param string $message Error message
      */
     private function log_error($message) {
+        $formatted_message = "[Odoo Integration Error] {$message}";
+
         // Try to use custom Odoo logging first
         if (function_exists('odoo_log')) {
-            odoo_log("[Odoo Integration Error] {$message}", 'error');
-        } elseif (function_exists('teamlog')) {
+            odoo_log($formatted_message, 'error');
+            return;
+        }
+
+        if (function_exists('teamlog')) {
             teamlog("Odoo Integration Error: {$message}");
-        } else {
-            // Fallback to WordPress error log
-            error_log("[Odoo Integration Error] {$message}");
+            return;
+        }
+
+        if (class_exists('Odoo_Logger')) {
+            Odoo_Logger::error($formatted_message);
+            return;
+        }
+
+        if (function_exists('do_action')) {
+            do_action('odoo_logger_missing_handler', $formatted_message, 'error');
         }
     }
     

@@ -22,15 +22,18 @@ class Odoo_Logger {
             teamlog($message);
             return;
         }
-        
+
         // Fallback to custom Odoo logging
         $log_message = sprintf('[Odoo Integration] %s', $message);
-        
+
         if (function_exists('odoo_log')) {
             odoo_log($log_message, $level);
-        } else {
-            // Ultimate fallback to WordPress error log
-            error_log($log_message);
+            return;
+        }
+
+        // Allow developers to hook in their own fallback handler without touching WP debug log
+        if (function_exists('do_action')) {
+            do_action('odoo_logger_missing_handler', $log_message, $level);
         }
     }
     
