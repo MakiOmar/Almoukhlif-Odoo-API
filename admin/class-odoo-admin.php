@@ -467,6 +467,32 @@ class Odoo_Admin {
      * Handle admin actions for cache management
      */
     public static function handle_admin_actions() {
+        if (isset($_GET['action']) && $_GET['action'] === 'odoo_clear_activity_logs') {
+            if (!current_user_can('manage_woocommerce')) {
+                wp_die(__('You do not have permission to perform this action.', 'text-domain'));
+            }
+
+            if (!isset($_GET['_wpnonce']) || !wp_verify_nonce($_GET['_wpnonce'], 'odoo_clear_activity_logs')) {
+                wp_die(__('Security check failed.', 'text-domain'));
+            }
+
+            $summary = array('deleted_files' => 0, 'deleted_directories' => 0);
+
+            if (class_exists('Odoo_Order_Activity_Logger')) {
+                $summary = Odoo_Order_Activity_Logger::clear_all_logs();
+            }
+
+            $redirect_args = array(
+                'page' => 'order-activity-logs',
+                'logs_cleared' => 1,
+                'log_files_deleted' => intval($summary['deleted_files']),
+                'log_dirs_deleted' => intval($summary['deleted_directories']),
+            );
+
+            wp_safe_redirect(add_query_arg($redirect_args, admin_url('admin.php')));
+            exit;
+        }
+
         if (isset($_GET['action']) && $_GET['action'] === 'odoo_mark_skipped_single') {
             if (!current_user_can('manage_woocommerce')) {
                 wp_die(__('You do not have permission to perform this action.', 'text-domain'));

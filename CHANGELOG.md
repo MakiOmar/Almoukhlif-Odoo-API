@@ -2,6 +2,24 @@
 
 # Changelog
 
+## [1.251] - 2025-11-07
+
+### Added
+- "Clear Activity Logs" action in the admin Activity Logs screen with confirmation dialog and success summary.
+- Logger utility method to purge stored activity logs programmatically.
+
+### Changed
+- Admin action handler now supports clearing activity logs with proper permission and nonce checks.
+
+### Technical Details
+- Files Modified:
+  - `admin/pages/order-activity-logs.php` – Added clear logs button, confirmation, and success notice.
+  - `admin/class-odoo-admin.php` – Added handler for clearing logs.
+  - `utils/class-odoo-order-activity-logger.php` – Introduced recursive deletion helper.
+  - `wp-odoo-integration.php` – Bumped version to 1.251.
+  - `includes/class-odoo-core.php` – Updated VERSION constant to 1.251.
+  - `README.md` – Documented log clearing feature and version update.
+
 ## [1.250] - 2025-11-07
 
 ### Added

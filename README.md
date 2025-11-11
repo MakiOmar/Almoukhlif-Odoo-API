@@ -2,11 +2,15 @@
 
 A comprehensive WordPress plugin that integrates WooCommerce with Odoo ERP system for stock validation, order synchronization, and inventory management.
 
-**Current Version: 1.250**
+**Current Version: 1.251**
 
 ## 📋 Changelog
 
-### Version 1.250 (Latest)
+### Version 1.251 (Latest)
+- 🧹 NEW: Admins can clear all activity logs directly from the Activity Logs screen with a confirmation prompt.
+- 🧾 ENHANCED: Log clearing summary shows how many files and directories were removed.
+
+### Version 1.250
 - 🔍 ENHANCED: Activity logs now capture the exact request payload sent to Odoo for success, failure, and cancellation events.
 - ⚙️ CHANGED: Order processing passes request payloads through to custom hooks for deeper debugging.
 
@@ -304,6 +308,7 @@ The plugin includes a comprehensive order activity logging system that tracks al
 - Order cancellations in Odoo
 - Authentication failures
 - API response details
+- Manual log clearing actions with deletion summary
 
 #### **System Information**
 - Trigger source (Admin Panel, REST API, AJAX, Frontend, etc.)

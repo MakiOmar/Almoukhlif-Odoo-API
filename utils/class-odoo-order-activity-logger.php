@@ -556,6 +556,58 @@ class Odoo_Order_Activity_Logger {
     }
     
     /**
+     * Clear all activity logs from the storage directory.
+     *
+     * Recursively deletes all log files and subdirectories while keeping
+     * the root `order-activity-logs` directory in place.
+     *
+     * @return array Summary with counts of deleted files and directories.
+     */
+    public static function clear_all_logs() {
+        $logs_dir = WP_CONTENT_DIR . '/order-activity-logs';
+        $summary = array(
+            'deleted_files' => 0,
+            'deleted_directories' => 0,
+        );
+
+        if (!file_exists($logs_dir) || !is_dir($logs_dir)) {
+            return $summary;
+        }
+
+        self::delete_directory_contents($logs_dir, $summary['deleted_files'], $summary['deleted_directories']);
+
+        return $summary;
+    }
+
+    /**
+     * Recursively delete the contents of a directory.
+     *
+     * @param string $dir Directory path.
+     * @param int    $deleted_files Reference counter for deleted files.
+     * @param int    $deleted_directories Reference counter for deleted directories.
+     * @return void
+     */
+    private static function delete_directory_contents($dir, &$deleted_files, &$deleted_directories) {
+        $items = glob(trailingslashit($dir) . '*', GLOB_MARK);
+        if (empty($items)) {
+            return;
+        }
+
+        foreach ($items as $item) {
+            if (is_dir($item)) {
+                self::delete_directory_contents($item, $deleted_files, $deleted_directories);
+                if (@rmdir($item)) {
+                    $deleted_directories++;
+                }
+            } else {
+                if (@unlink($item)) {
+                    $deleted_files++;
+                }
+            }
+        }
+    }
+
+    /**
      * Get backtrace information for debugging
      * 
      * @return array Backtrace info

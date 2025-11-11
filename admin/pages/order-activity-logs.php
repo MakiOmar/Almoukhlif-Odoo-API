@@ -148,12 +148,47 @@ if (!function_exists('display_order_activity_logs_page')) {
             'Odoo Integration' => 'Odoo Integration'
         );
         
+        $clear_logs_url = wp_nonce_url(
+            add_query_arg(
+                array(
+                    'page' => 'order-activity-logs',
+                    'action' => 'odoo_clear_activity_logs',
+                ),
+                admin_url('admin.php')
+            ),
+            'odoo_clear_activity_logs'
+        );
+
+        $logs_cleared = isset($_GET['logs_cleared']) ? intval($_GET['logs_cleared']) : 0;
+        $deleted_files = isset($_GET['log_files_deleted']) ? max(0, intval($_GET['log_files_deleted'])) : 0;
+        $deleted_dirs = isset($_GET['log_dirs_deleted']) ? max(0, intval($_GET['log_dirs_deleted'])) : 0;
+
         ?>
         <div class="wrap">
             <h1><?php _e('Order Activity Logs', 'text-domain'); ?></h1>
             
+            <?php if ($logs_cleared): ?>
+                <div class="notice notice-success is-dismissible">
+                    <p>
+                        <?php
+                        printf(
+                            /* translators: 1: number of files deleted, 2: number of directories removed */
+                            esc_html__('Activity logs cleared successfully. %1$d files and %2$d directories were removed.', 'text-domain'),
+                            $deleted_files,
+                            $deleted_dirs
+                        );
+                        ?>
+                    </p>
+                </div>
+            <?php endif; ?>
+
             <!-- Filters -->
             <div class="tablenav top">
+                <div class="alignright actions">
+                    <a class="button button-secondary" href="<?php echo esc_url($clear_logs_url); ?>" onclick="return confirm('<?php echo esc_js(__('Are you sure you want to permanently delete all activity logs? This action cannot be undone.', 'text-domain')); ?>');">
+                        <?php esc_html_e('Clear Activity Logs', 'text-domain'); ?>
+                    </a>
+                </div>
 				<form method="get" action="">
 					<input type="hidden" name="page" value="order-activity-logs">
 					
