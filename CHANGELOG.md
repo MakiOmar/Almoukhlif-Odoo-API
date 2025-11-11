@@ -2,6 +2,21 @@
 
 # Changelog
 
+## [1.248] - 2025-11-07
+
+### Added
+- Bulk admin action on Failed Orders screen to mark selected orders as skipped instead of failed.
+
+### Changed
+- Orders with `oodo-status` set to `skipped` are excluded from Failed Orders views and counts.
+
+### Technical Details
+- Files Modified:
+  - `admin/pages/failed-orders.php` – Added skip action processing, UI button, and success notice.
+  - `README.md` – Documented skipped status workflow and updated version banner.
+  - `wp-odoo-integration.php` – Bumped version to 1.248.
+  - `includes/class-odoo-core.php` – Updated VERSION constant to 1.248.
+
 ## [1.247] - 2025-11-07
 
 ### Changed
