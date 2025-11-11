@@ -44,9 +44,9 @@ class Odoo_Order_Activity_Logger {
         add_action('wp_ajax_sync_order_to_odoo', array(__CLASS__, 'log_ajax_action'), 5);
         
         // Hook into Odoo-specific actions
-        add_action('odoo_order_sent', array(__CLASS__, 'log_odoo_order_sent'), 10, 2);
-        add_action('odoo_order_failed', array(__CLASS__, 'log_odoo_order_failed'), 10, 2);
-        add_action('odoo_order_cancelled', array(__CLASS__, 'log_odoo_order_cancelled'), 10, 2);
+        add_action('odoo_order_sent', array(__CLASS__, 'log_odoo_order_sent'), 10, 3);
+        add_action('odoo_order_failed', array(__CLASS__, 'log_odoo_order_failed'), 10, 3);
+        add_action('odoo_order_cancelled', array(__CLASS__, 'log_odoo_order_cancelled'), 10, 3);
     }
     
     /**
@@ -319,8 +319,9 @@ class Odoo_Order_Activity_Logger {
      * 
      * @param int $order_id Order ID
      * @param array $response Response data
+     * @param array|null $request_payload Request payload sent to Odoo
      */
-    public static function log_odoo_order_sent($order_id, $response) {
+    public static function log_odoo_order_sent($order_id, $response, $request_payload = null) {
         $activity_data = array(
             'order_id' => $order_id,
             'activity_type' => 'odoo_order_sent',
@@ -330,7 +331,8 @@ class Odoo_Order_Activity_Logger {
             'timestamp' => current_time('Y-m-d H:i:s'),
             'ip_address' => self::get_client_ip(),
             'user_agent' => self::get_user_agent(),
-            'odoo_response' => $response
+            'odoo_response' => $response,
+            'odoo_request' => $request_payload
         );
         
         self::write_activity_log($activity_data);
@@ -341,8 +343,9 @@ class Odoo_Order_Activity_Logger {
      * 
      * @param int $order_id Order ID
      * @param array $error Error data
+     * @param array|null $request_payload Request payload sent to Odoo
      */
-    public static function log_odoo_order_failed($order_id, $error) {
+    public static function log_odoo_order_failed($order_id, $error, $request_payload = null) {
         $activity_data = array(
             'order_id' => $order_id,
             'activity_type' => 'odoo_order_failed',
@@ -352,7 +355,8 @@ class Odoo_Order_Activity_Logger {
             'timestamp' => current_time('Y-m-d H:i:s'),
             'ip_address' => self::get_client_ip(),
             'user_agent' => self::get_user_agent(),
-            'error_data' => $error
+            'error_data' => $error,
+            'odoo_request' => $request_payload
         );
         
         self::write_activity_log($activity_data);
@@ -363,8 +367,9 @@ class Odoo_Order_Activity_Logger {
      * 
      * @param int $order_id Order ID
      * @param array $response Response data
+     * @param array|null $request_payload Request payload sent to Odoo
      */
-    public static function log_odoo_order_cancelled($order_id, $response) {
+    public static function log_odoo_order_cancelled($order_id, $response, $request_payload = null) {
         $activity_data = array(
             'order_id' => $order_id,
             'activity_type' => 'odoo_order_cancelled',
@@ -374,7 +379,8 @@ class Odoo_Order_Activity_Logger {
             'timestamp' => current_time('Y-m-d H:i:s'),
             'ip_address' => self::get_client_ip(),
             'user_agent' => self::get_user_agent(),
-            'odoo_response' => $response
+            'odoo_response' => $response,
+            'odoo_request' => $request_payload
         );
         
         self::write_activity_log($activity_data);

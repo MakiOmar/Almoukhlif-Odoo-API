@@ -93,7 +93,14 @@ class Odoo_Helpers {
             $order->add_order_note("تم إلغاء الطلب بنجاح في Odoo برقم: $odoo_order_id", false);
             
             // Trigger activity logger event
-            do_action('odoo_order_cancelled', $order_id, $response_data);
+            do_action(
+                'odoo_order_cancelled',
+                $order_id,
+                $response_data,
+                array(
+                    'odoo_order_id' => $odoo_order_id,
+                )
+            );
         } else {
             // Log failure as a private note.
             $order->add_order_note("فشل في إلغاء الطلب في Odoo برقم: $odoo_order_id. الرد: " . wp_remote_retrieve_body($response), false);

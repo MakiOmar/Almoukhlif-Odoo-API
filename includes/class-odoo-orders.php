@@ -32,7 +32,8 @@ class Odoo_Orders {
         // Prepare order data
         $orders_data = array();
         $orders_temp = array();
-        self::process_order_data($order_ids, $orders_data, $orders_temp, $update);
+        $orders_payload_map = array();
+        self::process_order_data($order_ids, $orders_data, $orders_temp, $update, $orders_payload_map);
 
         if (empty($orders_data)) {
             return [];
@@ -71,14 +72,16 @@ class Odoo_Orders {
         // Trigger activity logger events
         if ($result['success']) {
             foreach ($result['processed_orders'] as $order_id) {
-                do_action('odoo_order_sent', $order_id, $response_data);
+                $request_payload = isset($orders_payload_map[$order_id]) ? $orders_payload_map[$order_id] : null;
+                do_action('odoo_order_sent', $order_id, $response_data, $request_payload);
             }
         } else {
             foreach ($order_ids as $order_id) {
+                $request_payload = isset($orders_payload_map[$order_id]) ? $orders_payload_map[$order_id] : null;
                 do_action('odoo_order_failed', $order_id, array(
                     'error' => $result['message'],
                     'response' => $response_data
-                ));
+                ), $request_payload);
             }
         }
 
@@ -134,7 +137,8 @@ class Odoo_Orders {
         // Prepare order data
         $orders_data = array();
         $orders_temp = array();
-        self::process_order_data($order_ids, $orders_data, $orders_temp, false);
+        $orders_payload_map = array();
+        self::process_order_data($order_ids, $orders_data, $orders_temp, false, $orders_payload_map);
 
         if (empty($orders_data)) {
             return wp_send_json_error(array('message' => 'No valid orders to send.'));
@@ -173,14 +177,16 @@ class Odoo_Orders {
         // Trigger activity logger events
         if ($result['success']) {
             foreach ($result['processed_orders'] as $order_id) {
-                do_action('odoo_order_sent', $order_id, $response_data);
+                $request_payload = isset($orders_payload_map[$order_id]) ? $orders_payload_map[$order_id] : null;
+                do_action('odoo_order_sent', $order_id, $response_data, $request_payload);
             }
         } else {
             foreach ($order_ids as $order_id) {
+                $request_payload = isset($orders_payload_map[$order_id]) ? $orders_payload_map[$order_id] : null;
                 do_action('odoo_order_failed', $order_id, array(
                     'error' => $result['message'],
                     'response' => $response_data
-                ));
+                ), $request_payload);
             }
         }
 
@@ -226,7 +232,7 @@ class Odoo_Orders {
      * @param array $orders_temp Reference to orders temp array
      * @param bool $update Whether this is an update operation
      */
-    public static function process_order_data($order_ids, &$orders_data, &$orders_temp, $update = false) {
+    public static function process_order_data($order_ids, &$orders_data, &$orders_temp, $update = false, &$orders_payload_map = null) {
         foreach ($order_ids as $order_id) {
             $odoo_order = get_post_meta($order_id, 'odoo_order', true);
             if (!empty($odoo_order) && is_numeric($odoo_order) && !$update) {
@@ -374,6 +380,10 @@ class Odoo_Orders {
             }
             
             $order_data['discount'] = $applied_coupons_discount + $discount;
+            if (is_array($orders_payload_map)) {
+                $orders_payload_map[$order_id] = $order_data;
+            }
+
             $orders_data['orders'][] = $order_data;
         }
         

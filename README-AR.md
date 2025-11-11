@@ -197,10 +197,11 @@ add_action('woocommerce_order_status_changed', 'on_order_status_changed');
 
 #### 4. أحداث مخصصة
 ```php
-do_action('odoo_order_sent', $order_id, $response_data);
-do_action('odoo_order_failed', $order_id, $error_data);
+do_action('odoo_order_sent', $order_id, $response_data, $request_payload);
+do_action('odoo_order_failed', $order_id, $error_data, $request_payload);
 ```
 - يتم تشغيلها عند نجاح أو فشل إرسال الطلب
+- يحتوي المتغير `$request_payload` على بيانات الطلب المرسلة إلى Odoo لمراجعتها بسهولة
 
 ### أحداث أودو
 

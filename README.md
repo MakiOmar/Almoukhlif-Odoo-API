@@ -2,15 +2,15 @@
 
 A comprehensive WordPress plugin that integrates WooCommerce with Odoo ERP system for stock validation, order synchronization, and inventory management.
 
-**Current Version: 1.248**
+**Current Version: 1.250**
 
 ## 📋 Changelog
 
-### Version 1.248 (Latest)
-- ➕ ADDED: Bulk action on Failed Orders screen to mark selected orders as skipped.
-- 🔧 CHANGED: Orders marked as skipped no longer appear in Failed Odoo Orders views or admin bar counts.
+### Version 1.250 (Latest)
+- 🔍 ENHANCED: Activity logs now capture the exact request payload sent to Odoo for success, failure, and cancellation events.
+- ⚙️ CHANGED: Order processing passes request payloads through to custom hooks for deeper debugging.
 
-### Version 1.247
+### Version 1.249
 - 🔧 CHANGED: Removed all `error_log()` fallbacks so logs never write to the default WordPress debug log.
 - ➕ ADDED: New `odoo_logger_missing_handler` action hook for custom fallback logging when `odoo_log()` and `teamlog()` are unavailable.
 
@@ -299,7 +299,8 @@ The plugin includes a comprehensive order activity logging system that tracks al
 - AJAX operations
 
 #### **Odoo Integration Activities**
-- Orders sent to Odoo (success/failure)
+- Orders sent to Odoo (success/failure) with response details
+- Request payloads sent to Odoo for auditing
 - Order cancellations in Odoo
 - Authentication failures
 - API response details
@@ -451,8 +452,8 @@ Failed orders can be recovered through:
 ### **Marking Failed Orders as Skipped**
 
 - Navigate to **Odoo Orders → Failed Orders**.
-- Select one or more orders that should no longer be retried.
-- Click **Mark Selected as Skipped**.
+- Click **Set as Skipped** on an individual order or select multiple orders.
+- Use **Mark Selected as Skipped** for bulk updates.
 - The plugin updates `oodo-status` to `skipped`, adds a note to each order, and refreshes admin bar counters automatically.
 
 ## 🔒 Security Features

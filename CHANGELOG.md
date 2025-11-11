@@ -2,6 +2,41 @@
 
 # Changelog
 
+## [1.250] - 2025-11-07
+
+### Added
+- Captured Odoo request payloads in activity logs for success, failure, and cancellation events.
+
+### Changed
+- `odoo_order_sent`, `odoo_order_failed`, and `odoo_order_cancelled` hooks now receive the request payload as the third parameter.
+- Order processing pipeline stores per-order request payloads for downstream logging.
+
+### Technical Details
+- Files Modified:
+  - `includes/class-odoo-orders.php` – Added request payload map and forwarded data to hooks.
+  - `utils/class-odoo-order-activity-logger.php` – Logged new `odoo_request` field for Odoo activity types.
+  - `utils/class-odoo-helpers.php` – Passed cancellation request context to activity logger.
+  - `wp-odoo-integration.php` – Bumped version to 1.250 and updated helper.
+  - `includes/class-odoo-core.php` – Updated VERSION constant to 1.250.
+  - `README.md` – Documented request payload logging and version update.
+  - `README-AR.md` – Updated custom hook usage documentation.
+
+## [1.249] - 2025-11-07
+
+### Added
+- Row-level “Set as Skipped” action on the Failed Orders admin screen.
+
+### Changed
+- Centralized skip handling in `Odoo_Admin` so single and bulk actions share the same logic and preserve current filters.
+
+### Technical Details
+- Files Modified:
+  - `admin/pages/failed-orders.php` – Added per-row skip button and refactored bulk action to reuse shared helper.
+  - `admin/class-odoo-admin.php` – Added helper methods for marking orders as skipped and handling single-action redirects.
+  - `README.md` – Documented row-level skip action and updated version badge.
+  - `wp-odoo-integration.php` – Bumped version to 1.249.
+  - `includes/class-odoo-core.php` – Updated VERSION constant to 1.249.
+
 ## [1.248] - 2025-11-07
 
 ### Added

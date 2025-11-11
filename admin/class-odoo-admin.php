@@ -369,9 +369,127 @@ class Odoo_Admin {
     }
     
     /**
+     * Mark orders as skipped so they no longer appear in Failed Orders views.
+     *
+     * @param array|int $order_ids Order IDs to mark as skipped.
+     * @return int Number of orders updated.
+     */
+    public static function mark_orders_as_skipped($order_ids) {
+        if (empty($order_ids)) {
+            return 0;
+        }
+
+        if (!is_array($order_ids)) {
+            $order_ids = array($order_ids);
+        }
+
+        $current_user = wp_get_current_user();
+        $actor_name   = ($current_user instanceof WP_User && $current_user->ID) ? $current_user->display_name : '';
+
+        $updated = 0;
+
+        foreach ($order_ids as $order_id) {
+            $order_id = absint($order_id);
+            if (!$order_id) {
+                continue;
+            }
+
+            $order = wc_get_order($order_id);
+            if (!$order) {
+                continue;
+            }
+
+            update_post_meta($order_id, 'oodo-status', 'skipped');
+
+            $order->add_order_note(
+                sprintf(
+                    __('Odoo sync skipped by %s.', 'text-domain'),
+                    $actor_name ? $actor_name : __('System', 'text-domain')
+                ),
+                false
+            );
+
+            $updated++;
+        }
+
+        if ($updated > 0) {
+            self::clear_cache();
+        }
+
+        return $updated;
+    }
+
+    /**
+     * Build redirect query args for the Failed Orders screen, preserving filters.
+     *
+     * @param int|null $skipped_count Optional number of skipped orders to surface in notice.
+     * @return array
+     */
+    public static function get_failed_orders_redirect_args($skipped_count = null) {
+        $args = array('page' => 'odoo-failed-orders');
+
+        if (class_exists('Odoo_Admin_Filters')) {
+            $filters = Odoo_Admin_Filters::get_filter_params();
+
+            if (!empty($filters['paged'])) {
+                $args['paged'] = max(1, intval($filters['paged']));
+            }
+
+            if (!empty($filters['from_date'])) {
+                $args['from_date'] = $filters['from_date'];
+            }
+
+            if (!empty($filters['to_date'])) {
+                $args['to_date'] = $filters['to_date'];
+            }
+
+            if (!empty($filters['order_status'])) {
+                $args['order_status'] = $filters['order_status'];
+            }
+
+            if (!empty($filters['customer_search'])) {
+                $args['customer_search'] = $filters['customer_search'];
+            }
+
+            if (!empty($filters['order_id_search'])) {
+                $args['order_id_search'] = $filters['order_id_search'];
+            }
+        }
+
+        if ($skipped_count !== null) {
+            $args['odoo_skipped'] = max(0, intval($skipped_count));
+        }
+
+        return $args;
+    }
+
+    /**
      * Handle admin actions for cache management
      */
     public static function handle_admin_actions() {
+        if (isset($_GET['action']) && $_GET['action'] === 'odoo_mark_skipped_single') {
+            if (!current_user_can('manage_woocommerce')) {
+                wp_die(__('You do not have permission to perform this action.', 'text-domain'));
+            }
+
+            $order_id = isset($_GET['order_id']) ? absint($_GET['order_id']) : 0;
+
+            if (!$order_id) {
+                $redirect_args = self::get_failed_orders_redirect_args(0);
+                wp_safe_redirect(add_query_arg($redirect_args, admin_url('admin.php')));
+                exit;
+            }
+
+            check_admin_referer('odoo_mark_skipped_single_' . $order_id);
+
+            $skipped_count = self::mark_orders_as_skipped(array($order_id));
+
+            $redirect_args = self::get_failed_orders_redirect_args($skipped_count);
+
+            wp_safe_redirect(add_query_arg($redirect_args, admin_url('admin.php')));
+            exit;
+        }
+
         if (isset($_GET['action']) && $_GET['action'] === 'clear_odoo_cache' && 
             isset($_GET['_wpnonce']) && wp_verify_nonce($_GET['_wpnonce'], 'clear_odoo_cache')) {
             

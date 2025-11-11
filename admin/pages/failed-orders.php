@@ -19,45 +19,18 @@ function display_odoo_failed_orders_page() {
 
 		check_admin_referer('odoo_failed_orders_actions', 'odoo_failed_orders_nonce');
 
-		$skipped_count = 0;
-		$current_user = wp_get_current_user();
+		$skipped_count = class_exists('Odoo_Admin')
+			? Odoo_Admin::mark_orders_as_skipped($_POST['order_ids'])
+			: 0;
 
-		foreach ((array) $_POST['order_ids'] as $order_id) {
-			$order_id = absint($order_id);
-			if (!$order_id) {
-				continue;
-			}
-
-			$order = wc_get_order($order_id);
-			if (!$order) {
-				continue;
-			}
-
-			update_post_meta($order_id, 'oodo-status', 'skipped');
-
-			$order->add_order_note(
-				sprintf(
-					__('Odoo sync skipped by %s.', 'text-domain'),
-					$current_user->display_name ?: __('System', 'text-domain')
-				),
-				false
+		$redirect_args = class_exists('Odoo_Admin')
+			? Odoo_Admin::get_failed_orders_redirect_args($skipped_count)
+			: array(
+				'page' => 'odoo-failed-orders',
+				'odoo_skipped' => max(0, intval($skipped_count)),
 			);
 
-			$skipped_count++;
-		}
-
-		if (class_exists('Odoo_Admin')) {
-			Odoo_Admin::clear_cache();
-		}
-
-		// Preserve current filters when redirecting
-		$current_query = array();
-		foreach ($_GET as $key => $value) {
-			$current_query[sanitize_key($key)] = sanitize_text_field(wp_unslash($value));
-		}
-		$current_query['odoo_skipped'] = $skipped_count;
-
-		wp_safe_redirect(add_query_arg($current_query, admin_url('admin.php')));
+		wp_safe_redirect(add_query_arg($redirect_args, admin_url('admin.php')));
 		exit;
 	}
 	
@@ -140,6 +113,20 @@ function display_odoo_failed_orders_page() {
 							$order_name = $order->get_formatted_billing_full_name();
 							$status_key = 'wc-' . $order->get_status();
 							$status_label = isset($available_statuses[$status_key]) ? $available_statuses[$status_key] : ucfirst($order->get_status());
+							$skip_base_args = class_exists('Odoo_Admin')
+								? Odoo_Admin::get_failed_orders_redirect_args(null)
+								: array('page' => 'odoo-failed-orders');
+							$skip_url = add_query_arg(
+								array_merge(
+									(array) $skip_base_args,
+									array(
+										'action'   => 'odoo_mark_skipped_single',
+										'order_id' => $order->get_id(),
+									)
+								),
+								admin_url('admin.php')
+							);
+							$skip_url = wp_nonce_url($skip_url, 'odoo_mark_skipped_single_' . $order->get_id());
 							?>
 							<tr>
 								<td><input type="checkbox" name="order_ids[]" value="<?php echo esc_attr($order->get_id()); ?>" /></td>
@@ -151,6 +138,10 @@ function display_odoo_failed_orders_page() {
 								<td>
 									<a href="<?php echo esc_url(admin_url('post.php?post=' . $order->get_id() . '&action=edit')); ?>">
 										<?php esc_html_e('View Order', 'text-domain'); ?>
+									</a>
+									|
+									<a class="button button-secondary button-small" href="<?php echo esc_url($skip_url); ?>">
+										<?php esc_html_e('Set as Skipped', 'text-domain'); ?>
 									</a>
 								</td>
 							</tr>
