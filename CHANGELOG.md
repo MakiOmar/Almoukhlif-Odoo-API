@@ -2,6 +2,25 @@
 
 # Changelog
 
+## [1.252] - 2025-11-17
+
+### Added
+- Activity log entry for delivery validation attempts, capturing sanitized request metadata and raw response content for each order.
+
+### Changed
+- Delivery validation helper now builds the payload once, reuses it for logging, and passes it directly to the API layer for consistent auditing.
+- `Odoo_API::validate_delivery()` accepts an optional payload argument so callers can log exactly what was sent.
+
+### Technical Details
+- Files Modified:
+  - `utils/class-odoo-helpers.php` – Captured request metadata, response details, and invoked the activity logger.
+  - `utils/class-odoo-order-activity-logger.php` – Added `log_delivery_validation()` helper.
+  - `includes/class-odoo-api.php` – Allowed passing prebuilt payloads for delivery validation.
+  - `README.md` – Documented version 1.252.
+  - `wp-odoo-integration.php` – Bumped version to 1.252.
+  - `includes/class-odoo-core.php` – Updated `VERSION` constant to 1.252.
+  - `CHANGELOG.md` – Added this entry.
+
 ## [1.251] - 2025-11-07
 
 ### Added

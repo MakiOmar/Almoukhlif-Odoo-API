@@ -134,16 +134,37 @@ class Odoo_Helpers {
             return;
         }
 
+        $validation_endpoint = ODOO_BASE . 'api/sale.order/validate_order_delivery';
+        $validation_timestamp = current_time('Y-m-d H:i:s');
+        $validation_payload = array(
+            'orders' => array(
+                array(
+                    'RequestID' => (string) $odoo_order_id,
+                    'modified_date' => $validation_timestamp,
+                ),
+            ),
+        );
+
+        $activity_request_details = array(
+            'endpoint' => $validation_endpoint,
+            'payload' => $validation_payload,
+            'headers' => array(
+                'Content-Type' => 'application/json',
+                'token' => 'redacted'
+            ),
+        );
+
         // Send data to Odoo API using wp_remote_post.
-        $response = Odoo_API::validate_delivery($odoo_order_id, $token);
+        $response = Odoo_API::validate_delivery($odoo_order_id, $token, $validation_payload);
         
         // Log the response data
+        $response_body = is_wp_error($response) ? $response->get_error_message() : wp_remote_retrieve_body($response);
+        $response_code = is_wp_error($response) ? 'WP_ERROR' : wp_remote_retrieve_response_code($response);
         $response_log_data = array(
             'order_id' => $order_id,
             'odoo_order_id' => $odoo_order_id,
-            'response' => $response,
-            'response_body' => is_wp_error($response) ? $response->get_error_message() : wp_remote_retrieve_body($response),
-            'response_code' => is_wp_error($response) ? 'WP_ERROR' : wp_remote_retrieve_response_code($response),
+            'response_body' => $response_body,
+            'response_code' => $response_code,
             'timestamp' => current_time('Y-m-d H:i:s'),
             'user_id' => get_current_user_id()
         );
@@ -165,16 +186,42 @@ class Odoo_Helpers {
             return;
         }
 
-        $response_body = wp_remote_retrieve_body($response);
         $response_data = json_decode($response_body, true);
+        $result_status = 'failed';
+        $result_message = '';
 
         if (isset($response_data['result']['status']) && 'success' === $response_data['result']['status']) {
             // Log success message.
             $message = $response_data['result']['message'] ?? 'تم التحقق من عملية تسليم الطلب بنجاح.';
             $order->add_order_note("نجاح واجهة Odoo API: $message", false);
+            $result_status = 'success';
+            $result_message = $message;
         } else {
             // Log failure with complete response for debugging.
-            $order->add_order_note("فشل في التحقق من تسليم الطلب في Odoo للطلب رقم: $odoo_order_id. الرد: $response_body", false);
+            $failure_message = "فشل في التحقق من تسليم الطلب في Odoo للطلب رقم: $odoo_order_id. الرد: $response_body";
+            $order->add_order_note($failure_message, false);
+            $result_message = $failure_message;
+        }
+
+        if (class_exists('Odoo_Order_Activity_Logger')) {
+            $response_details = array(
+                'body' => $response_body,
+                'code' => $response_code,
+                'is_wp_error' => is_wp_error($response),
+                'wp_error_code' => is_wp_error($response) ? $response->get_error_code() : null,
+                'wp_error_message' => is_wp_error($response) ? $response->get_error_message() : null,
+            );
+
+            Odoo_Order_Activity_Logger::log_delivery_validation(
+                $order_id,
+                $odoo_order_id,
+                $activity_request_details,
+                $response_details,
+                array(
+                    'status' => $result_status,
+                    'message' => $result_message ?: ($response_data['result']['message'] ?? ''),
+                )
+            );
         }
     }
     

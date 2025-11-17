@@ -70,9 +70,9 @@ class Odoo_API {
      * @param string $token Authentication token
      * @return WP_Error|array Response from Odoo
      */
-    public static function validate_delivery($odoo_order_id, $token) {
+    public static function validate_delivery($odoo_order_id, $token, $payload = null) {
         $url = ODOO_BASE . 'api/sale.order/validate_order_delivery';
-        $data = array(
+        $data = $payload ?? array(
             'orders' => array(
                 array(
                     'RequestID' => (string) $odoo_order_id,

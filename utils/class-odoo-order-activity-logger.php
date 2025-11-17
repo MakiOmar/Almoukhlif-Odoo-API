@@ -387,6 +387,44 @@ class Odoo_Order_Activity_Logger {
     }
     
     /**
+     * Log delivery validation attempts including request and response payloads
+     * 
+     * @param int   $order_id Order ID
+     * @param int   $odoo_order_id Related Odoo order ID
+     * @param array $request_details Request metadata (endpoint, payload, headers)
+     * @param array $response_details Response metadata (body, code, errors)
+     * @param array $result Summary result data (status/message)
+     */
+    public static function log_delivery_validation($order_id, $odoo_order_id, $request_details, $response_details, $result = array()) {
+        $activity_data = array(
+            'order_id' => $order_id,
+            'activity_type' => 'delivery_validation',
+            'status' => $result['status'] ?? 'unknown',
+            'result_message' => $result['message'] ?? '',
+            'odoo_order_id' => $odoo_order_id,
+            'user_id' => get_current_user_id(),
+            'user_info' => self::get_user_info(),
+            'trigger_source' => self::detect_trigger_source(),
+            'timestamp' => current_time('Y-m-d H:i:s'),
+            'ip_address' => self::get_client_ip(),
+            'user_agent' => self::get_user_agent(),
+            'request_details' => $request_details,
+            'response_details' => $response_details,
+        );
+
+        self::write_activity_log($activity_data);
+
+        $summary_message = sprintf(
+            'Delivery validation (%s) for order #%s (Odoo #%s)',
+            $activity_data['status'],
+            $order_id,
+            $odoo_order_id
+        );
+
+        Odoo_Logger::info($summary_message);
+    }
+    
+    /**
      * Write activity log to file with improved hierarchical structure
      * 
      * @param array $activity_data Activity data to log
