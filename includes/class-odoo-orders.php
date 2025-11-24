@@ -245,6 +245,9 @@ class Odoo_Orders {
                 continue;
             }
 
+            // Note: Order totals should already be calculated by WooCommerce before hooks fire
+            // However, we'll use a fallback to read from meta directly if get_discount_total() returns 0
+
             $applied_coupons = array();
             // Loop through coupon items for this order
             foreach ($order->get_items('coupon') as $item) {
@@ -261,6 +264,82 @@ class Odoo_Orders {
             }
             
             $applied_coupons_discount = Odoo_Helpers::get_total_coupon_discount($applied_coupons);
+            
+            // Get the total discount from the order (includes all discount types: coupons, cart discounts, manual discounts, etc.)
+            // Try multiple methods to ensure we capture the discount
+            $order_total_discount = 0;
+            
+            // Method 1: Try get_discount_total() from order object
+            $discount_from_order = $order->get_discount_total();
+            if (!empty($discount_from_order) && $discount_from_order > 0) {
+                $order_total_discount = (float) $discount_from_order;
+            }
+            
+            // Method 2: If order method returns 0, check _cart_discount meta directly
+            // This handles cases where totals haven't been fully calculated yet or stored differently
+            if ($order_total_discount == 0) {
+                // Try WooCommerce order meta method first (preferred)
+                if (method_exists($order, 'get_meta')) {
+                    $cart_discount_meta = $order->get_meta('_cart_discount');
+                    if (!empty($cart_discount_meta)) {
+                        if (is_array($cart_discount_meta)) {
+                            foreach ($cart_discount_meta as $discount_value) {
+                                $discount_value = (float) $discount_value;
+                                if ($discount_value > 0) {
+                                    $order_total_discount = $discount_value;
+                                    break;
+                                }
+                            }
+                        } else {
+                            $order_total_discount = (float) $cart_discount_meta;
+                        }
+                    }
+                }
+                
+                // Fallback to get_post_meta if order method didn't work
+                if ($order_total_discount == 0) {
+                    // Try with true first (single value or array)
+                    $cart_discount_meta = get_post_meta($order_id, '_cart_discount', true);
+                    
+                    // If empty, try with false to get all values
+                    if (empty($cart_discount_meta)) {
+                        $cart_discount_meta = get_post_meta($order_id, '_cart_discount', false);
+                        // If false returns array of arrays, get first element
+                        if (is_array($cart_discount_meta) && !empty($cart_discount_meta)) {
+                            $cart_discount_meta = reset($cart_discount_meta);
+                        }
+                    }
+                    
+                    if (!empty($cart_discount_meta)) {
+                        // _cart_discount can be an array (as seen in your data: ["591.31", "591.31"])
+                        if (is_array($cart_discount_meta)) {
+                            // Get the first non-empty value from the array
+                            foreach ($cart_discount_meta as $discount_value) {
+                                $discount_value = (float) $discount_value;
+                                if ($discount_value > 0) {
+                                    $order_total_discount = $discount_value;
+                                    break;
+                                }
+                            }
+                        } else {
+                            $order_total_discount = (float) $cart_discount_meta;
+                        }
+                    }
+                }
+            }
+            
+            // Method 3: Calculate from subtotal and total difference as last resort
+            if ($order_total_discount == 0) {
+                $subtotal = (float) $order->get_subtotal();
+                $total = (float) $order->get_total();
+                $shipping = (float) $order->get_shipping_total();
+                $tax = (float) $order->get_total_tax();
+                // Discount = Subtotal + Shipping + Tax - Total
+                $calculated_discount = $subtotal + $shipping + $tax - $total;
+                if ($calculated_discount > 0) {
+                    $order_total_discount = $calculated_discount;
+                }
+            }
             $billing_billing_company_vat = get_post_meta($order->get_id(), 'billing_billing_company_vat', true);
             $billing_short_address = get_post_meta($order->get_id(), 'billing_short_address', true);
             $billing_address_second = get_post_meta($order->get_id(), 'billing_address_second', true);
@@ -379,7 +458,41 @@ class Odoo_Orders {
                 );
             }
             
-            $order_data['discount'] = $applied_coupons_discount + $discount;
+            // Use order's total discount as primary source (includes coupons, cart discounts, manual discounts, etc.)
+            // Fall back to calculated discount only if order discount is not available
+            if ($order_total_discount > 0) {
+                $order_data['discount'] = $order_total_discount;
+            } else {
+                // Fallback: calculate from coupons and item-level discounts
+                $order_data['discount'] = $applied_coupons_discount + $discount;
+            }
+            
+            // Debug logging for discount calculation (can be removed in production)
+            if (function_exists('teamlog')) {
+                $cart_discount_meta_debug = get_post_meta($order_id, '_cart_discount', true);
+                $cart_discount_meta_debug_false = get_post_meta($order_id, '_cart_discount', false);
+                $discount_from_order_debug = $order->get_discount_total();
+                $subtotal_debug = $order->get_subtotal();
+                $total_debug = $order->get_total();
+                $shipping_debug = $order->get_shipping_total();
+                $tax_debug = $order->get_total_tax();
+                
+                teamlog(sprintf(
+                    'Order #%d Discount Calculation Debug: get_discount_total()=%s, _cart_discount(true)=%s, _cart_discount(false)=%s, order_total_discount=%.2f, applied_coupons_discount=%.2f, item_discount=%.2f, final_discount=%.2f, subtotal=%.2f, total=%.2f, shipping=%.2f, tax=%.2f',
+                    $order_id,
+                    var_export($discount_from_order_debug, true),
+                    var_export($cart_discount_meta_debug, true),
+                    var_export($cart_discount_meta_debug_false, true),
+                    $order_total_discount,
+                    $applied_coupons_discount,
+                    $discount,
+                    $order_data['discount'],
+                    $subtotal_debug,
+                    $total_debug,
+                    $shipping_debug,
+                    $tax_debug
+                ));
+            }
             if (is_array($orders_payload_map)) {
                 $orders_payload_map[$order_id] = $order_data;
             }

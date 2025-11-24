@@ -30,8 +30,8 @@ class Odoo_Hooks {
         add_filter('woocommerce_add_to_cart_validation', array('Odoo_Stock', 'check_stock_before_add_to_cart'), 10, 5);
         
         // Order hooks
-        add_action('woocommerce_checkout_order_created', array(__CLASS__, 'on_order_created'));
-        add_action('woocommerce_process_shop_order_meta', array(__CLASS__, 'on_order_updated'), 99);
+        add_action('woocommerce_checkout_order_created', array(__CLASS__, 'on_order_created', 9999));
+        add_action('woocommerce_process_shop_order_meta', array(__CLASS__, 'on_order_updated'), 9999);
         add_action('woocommerce_order_status_changed', array(__CLASS__, 'on_order_status_changed'), 10, 3);
         
         // Hook into post updates to catch ALL order status changes (including $order->update_status())

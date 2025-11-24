@@ -2,11 +2,16 @@
 
 A comprehensive WordPress plugin that integrates WooCommerce with Odoo ERP system for stock validation, order synchronization, and inventory management.
 
-**Current Version: 1.252**
+**Current Version: 1.253**
 
 ## 📋 Changelog
 
-### Version 1.252 (Latest)
+### Version 1.253 (Latest)
+- 🐛 **FIXED**: Order discount calculation now properly captures all discount types (coupons, cart discounts, manual discounts)
+- 🔍 **ENHANCED**: Multi-tier discount retrieval system with fallback methods to ensure discounts are always captured
+- 📊 **ADDED**: Comprehensive debug logging for discount calculation troubleshooting
+
+### Version 1.252
 - ✅ ADDED: Delivery validation attempts now create activity log entries that include sanitized request metadata and full response details for auditing.
 - 🛡️ ENHANCED: Delivery validation helper reuses the exact payload that was logged when calling the API, keeping logs and network traffic perfectly in sync.
 

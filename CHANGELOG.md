@@ -2,6 +2,28 @@
 
 # Changelog
 
+## [1.253] - 2025-11-23
+
+### Fixed
+- Order discount calculation now properly captures all discount types including cart discounts, manual discounts, and coupons
+- Fixed issue where `_cart_discount` meta stored as array was not being read correctly
+- Discount retrieval now uses multiple fallback methods to ensure discounts are always captured
+
+### Enhanced
+- Implemented three-tier discount retrieval system:
+  1. `$order->get_discount_total()` - Standard WooCommerce method
+  2. Order meta and post meta reading with proper array handling
+  3. Calculation fallback: `Subtotal + Shipping + Tax - Total = Discount`
+- Added comprehensive debug logging for discount calculation troubleshooting
+
+### Technical Details
+- Files Modified:
+  - `includes/class-odoo-orders.php` – Enhanced discount retrieval with multiple methods and fallbacks, added debug logging
+  - `wp-odoo-integration.php` – Bumped version to 1.253
+  - `includes/class-odoo-core.php` – Updated VERSION constant to 1.253
+  - `README.md` – Documented version 1.253 and discount calculation fix
+  - `CHANGELOG.md` – Added this entry
+
 ## [1.252] - 2025-11-17
 
 ### Added
