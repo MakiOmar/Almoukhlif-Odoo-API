@@ -3,7 +3,7 @@
 /**
  * Plugin Name: WordPress/Odoo Integration
  * Description: Integrates WooCommerce with Odoo to validate stock before adding products to the cart. Features improved order activity logging with hierarchical file structure for better performance and clean user interface. Includes dedicated debug logging system with admin interface and automatic log rotation by date.
- * Version: 1.253
+ * Version: 1.254
  * Author: Mohammad Omar
  *
  * @package Odoo
@@ -218,18 +218,18 @@ if (!function_exists('process_odoo_order')) {
 }
 
 if (!function_exists('send_orders_batch_to_odoo')) {
-    function send_orders_batch_to_odoo($order_ids, $update = false, $retry_attempt = 0) {
+    function send_orders_batch_to_odoo($order_ids, $update = false, $retry_attempt = 0, $context = array()) {
         if (class_exists('Odoo_Orders')) {
-            return Odoo_Orders::send_batch($order_ids, $update, $retry_attempt);
+            return Odoo_Orders::send_batch($order_ids, $update, $retry_attempt, $context);
         }
         return [];
     }
 }
 
 if (!function_exists('send_orders_batch_to_odoo_v2')) {
-    function send_orders_batch_to_odoo_v2($order_ids, $retry_attempt = 0) {
+    function send_orders_batch_to_odoo_v2($order_ids, $retry_attempt = 0, $context = array()) {
         if (class_exists('Odoo_Orders')) {
-            return Odoo_Orders::send_batch_ajax($order_ids, $retry_attempt);
+            return Odoo_Orders::send_batch_ajax($order_ids, $retry_attempt, $context);
         }
         return wp_send_json_error(array('message' => 'Odoo_Orders class not available'));
     }

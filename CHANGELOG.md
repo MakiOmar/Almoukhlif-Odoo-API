@@ -2,6 +2,26 @@
 
 # Changelog
 
+## [1.254] - 2025-11-23
+
+### Added
+- Activity log entries for manual “Send to Odoo” attempts now include full request payloads and Odoo responses.
+
+### Changed
+- `send_batch()` / `send_batch_ajax()` accept optional context to store request snapshots, response metadata, and retry info.
+- Admin sync button, WooCommerce bulk action, and failed/missing orders pages pass logging context so every manual attempt is recorded.
+
+### Technical Details
+- Files Modified:
+  - `includes/class-odoo-orders.php` – Added context-aware logging, response capture, and last-send snapshot.
+  - `utils/class-odoo-order-activity-logger.php` – Extended `log_odoo_send_attempt()` to persist request/response details.
+  - `hooks/class-odoo-hooks.php` – Synced button and bulk action now pass logging context.
+  - `admin/includes/class-odoo-filters.php` – Bulk resend helper logs send attempts with page context.
+  - `admin/pages/not-sent-orders-all.php` – Logs request/response for resend operations.
+  - `wp-odoo-integration.php` – Public send helpers accept context argument.
+  - `README.md` – Documented version 1.254.
+  - `includes/class-odoo-core.php` – Updated VERSION constant to 1.254.
+
 ## [1.253] - 2025-11-23
 
 ### Fixed

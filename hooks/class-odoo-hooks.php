@@ -390,7 +390,17 @@ class Odoo_Hooks {
         }
 
         // Call the function to sync with Odoo.
-        Odoo_Orders::send_batch_ajax(array($order_id));
+        Odoo_Orders::send_batch_ajax(
+            array($order_id),
+            0,
+            array(
+                'log_activity'  => true,
+                'ui_action'     => 'admin_sync_button',
+                'ajax_action'   => 'sync_order_to_odoo',
+                'trigger_source'=> 'AJAX',
+                'source_page'   => 'shop_order_edit',
+            )
+        );
     }
     
     /**
@@ -418,7 +428,18 @@ class Odoo_Hooks {
         }
 
         // Call the function to send orders
-        $sent = Odoo_Orders::send_batch($order_ids);
+        $sent = Odoo_Orders::send_batch(
+            $order_ids,
+            false,
+            0,
+            array(
+                'log_activity'  => true,
+                'ui_action'     => 'orders_list_bulk_action',
+                'bulk_action'   => $action,
+                'trigger_source'=> 'Admin Panel',
+                'source_page'   => 'shop_order_list',
+            )
+        );
 
         // Add a query argument to show success message
         $redirect_to = add_query_arg('sent_to_odoo', count($sent), $redirect_to);

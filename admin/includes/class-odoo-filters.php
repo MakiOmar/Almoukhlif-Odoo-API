@@ -165,7 +165,18 @@ class Odoo_Admin_Filters {
      */
     public static function process_bulk_action($action_name, $order_ids, $update = false) {
         if (isset($_POST[$action_name]) && !empty($_POST['order_ids'])) {
-            send_orders_batch_to_odoo($_POST['order_ids'], $update);
+            $page_slug = isset($_GET['page']) ? sanitize_key($_GET['page']) : '';
+            send_orders_batch_to_odoo(
+                $_POST['order_ids'],
+                $update,
+                0,
+                array(
+                    'log_activity'  => true,
+                    'ui_action'     => $action_name,
+                    'page'          => $page_slug,
+                    'trigger_source'=> 'Admin Panel',
+                )
+            );
             
             // Clear admin bar cache after bulk operation
             if (class_exists('Odoo_Admin')) {

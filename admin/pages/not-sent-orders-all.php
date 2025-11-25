@@ -54,7 +54,17 @@ function display_all_odoo_missing_status_orders_page() {
 
 	// Process bulk send action if submitted.
 	if ( isset( $_POST['bulk_send_odoo'] ) && ! empty( $_POST['order_ids'] ) ) {
-		send_orders_batch_to_odoo( $_POST['order_ids'] );
+		send_orders_batch_to_odoo(
+			$_POST['order_ids'],
+			false,
+			0,
+			array(
+				'log_activity'   => true,
+				'ui_action'      => 'not_sent_orders_bulk_send',
+				'trigger_source' => 'Admin Panel',
+				'page'           => 'all-missing-status-orders',
+			)
+		);
 		echo '<div class="updated"><p>' . esc_html__( 'Selected orders have been sent to Odoo.', 'text-domain' ) . '</p></div>';
 	}
 

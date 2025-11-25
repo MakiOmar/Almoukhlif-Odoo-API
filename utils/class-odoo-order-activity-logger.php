@@ -387,6 +387,65 @@ class Odoo_Order_Activity_Logger {
     }
     
     /**
+     * Log when an order (or multiple orders) are manually sent to Odoo
+     * 
+     * @param int|array $order_ids Order ID or array of IDs being sent
+     * @param array     $context   Additional context (ui_action, page, etc.)
+     */
+    public static function log_odoo_send_attempt($order_ids, $context = array()) {
+        if (empty($order_ids)) {
+            return;
+        }
+
+        if (!is_array($order_ids)) {
+            $order_ids = array($order_ids);
+        }
+
+        $order_ids = array_values(array_filter(array_map('intval', $order_ids)));
+        if (empty($order_ids)) {
+            return;
+        }
+
+        $primary_order_id = count($order_ids) === 1 ? $order_ids[0] : null;
+
+        $activity_data = array(
+            'order_id'       => $primary_order_id,
+            'order_ids'      => $order_ids,
+            'activity_type'  => 'odoo_send_attempt',
+            'context'        => $context,
+            'request_details' => array(
+                'orders_payload_map' => $context['request_payloads'] ?? null,
+                'orders_data'        => $context['request_body'] ?? null,
+            ),
+            'response_details' => array(
+                'body'        => $context['response_body'] ?? null,
+                'data'        => $context['response_data'] ?? null,
+                'code'        => $context['response_code'] ?? null,
+                'is_wp_error' => $context['response_is_wp_error'] ?? false,
+                'wp_error'    => $context['response_wp_error'] ?? null,
+            ),
+            'result'         => $context['result'] ?? null,
+            'update'         => $context['update'] ?? null,
+            'retry_attempt'  => $context['retry_attempt'] ?? null,
+            'user_id'        => get_current_user_id(),
+            'user_info'      => self::get_user_info(),
+            'trigger_source' => $context['trigger_source'] ?? self::detect_trigger_source(),
+            'timestamp'      => current_time('Y-m-d H:i:s'),
+            'ip_address'     => self::get_client_ip(),
+            'user_agent'     => self::get_user_agent(),
+        );
+
+        self::write_activity_log($activity_data);
+
+        $summary = sprintf(
+            'Manual send to Odoo initiated for %d order(s)%s',
+            count($order_ids),
+            $context && isset($context['ui_action']) ? ' via ' . $context['ui_action'] : ''
+        );
+        Odoo_Logger::info($summary);
+    }
+    
+    /**
      * Log delivery validation attempts including request and response payloads
      * 
      * @param int   $order_id Order ID

@@ -10,6 +10,22 @@ defined('ABSPATH') || die;
 class Odoo_Orders {
     
     /**
+     * Stores details about the most recent send attempt (for debugging/logging)
+     * 
+     * @var array|null
+     */
+    private static $last_send_context = null;
+    
+    /**
+     * Get the last send context
+     * 
+     * @return array|null
+     */
+    public static function get_last_send_context() {
+        return self::$last_send_context;
+    }
+    
+    /**
      * Send orders batch to Odoo (background/admin version)
      * 
      * @param array $order_ids Array of order IDs
@@ -17,7 +33,7 @@ class Odoo_Orders {
      * @param int $retry_attempt Current retry attempt
      * @return array|false Array of successful order IDs or false on failure
      */
-    public static function send_batch($order_ids, $update = false, $retry_attempt = 0) {
+    public static function send_batch($order_ids, $update = false, $retry_attempt = 0, $context = array()) {
         if (empty($order_ids) || !is_array($order_ids)) {
             return [];
         }
@@ -41,8 +57,14 @@ class Odoo_Orders {
 
         // Send to Odoo
         $response = Odoo_API::send_to_odoo($orders_data, $token);
-        $response_body = wp_remote_retrieve_body($response);
-        $response_data = json_decode($response_body);
+        $is_wp_error = is_wp_error($response);
+        $response_body = $is_wp_error ? $response->get_error_message() : wp_remote_retrieve_body($response);
+        $response_data = $is_wp_error ? null : json_decode($response_body);
+        $response_code = $is_wp_error ? 'WP_ERROR' : wp_remote_retrieve_response_code($response);
+        $wp_error_details = $is_wp_error ? array(
+            'code'    => $response->get_error_code(),
+            'message' => $response->get_error_message(),
+        ) : null;
 
         // Process response using unified processor
         $result = Odoo_Response::process_unified($response_data, $orders_temp, $update, false);
@@ -86,6 +108,45 @@ class Odoo_Orders {
         }
 
         // Handle retries if needed
+        self::$last_send_context = array(
+            'order_ids'          => $order_ids,
+            'orders_payload_map' => $orders_payload_map,
+            'orders_data'        => $orders_data,
+            'response'           => array(
+                'body'        => $response_body,
+                'data'        => $response_data,
+                'code'        => $response_code,
+                'is_wp_error' => $is_wp_error,
+                'wp_error'    => $wp_error_details,
+            ),
+            'result'           => $result,
+            'update'           => $update,
+            'retry_attempt'    => $retry_attempt,
+            'context'          => $context,
+            'timestamp'        => current_time('Y-m-d H:i:s'),
+        );
+
+        if (!empty($context['log_activity']) && class_exists('Odoo_Order_Activity_Logger')) {
+            Odoo_Order_Activity_Logger::log_odoo_send_attempt(
+                $order_ids,
+                array_merge(
+                    $context,
+                    array(
+                        'request_payloads'   => $orders_payload_map,
+                        'request_body'       => $orders_data,
+                        'response_body'      => $response_body,
+                        'response_data'      => $response_data,
+                        'response_code'      => $response_code,
+                        'response_is_wp_error' => $is_wp_error,
+                        'response_wp_error'  => $wp_error_details,
+                        'result'             => $result,
+                        'update'             => $update,
+                        'retry_attempt'      => $retry_attempt,
+                    )
+                )
+            );
+        }
+
         if (!$result['success'] && $retry_attempt < 3) {
             $retry_log_data = array(
                 'order_ids' => $order_ids,
@@ -108,7 +169,7 @@ class Odoo_Orders {
                 Odoo_Logger::log('retry_attempt', $retry_log_data);
             }
             
-            return self::handle_retry_attempt($order_ids, $update, $retry_attempt, 'send_batch');
+            return self::handle_retry_attempt($order_ids, $update, $retry_attempt, 'send_batch', $context);
         }
 
         return $result['processed_orders'];
@@ -121,7 +182,7 @@ class Odoo_Orders {
      * @param int $retry_attempt Current retry attempt
      * @return void Sends JSON response
      */
-    public static function send_batch_ajax($order_ids, $retry_attempt = 0) {
+    public static function send_batch_ajax($order_ids, $retry_attempt = 0, $context = array()) {
         if (empty($order_ids) || !is_array($order_ids)) {
             return wp_send_json_error(array('message' => 'No order IDs provided.'));
         }
@@ -146,8 +207,14 @@ class Odoo_Orders {
 
         // Send to Odoo
         $response = Odoo_API::send_to_odoo($orders_data, $token);
-        $response_body = wp_remote_retrieve_body($response);
-        $response_data = json_decode($response_body);
+        $is_wp_error = is_wp_error($response);
+        $response_body = $is_wp_error ? $response->get_error_message() : wp_remote_retrieve_body($response);
+        $response_data = $is_wp_error ? null : json_decode($response_body);
+        $response_code = $is_wp_error ? 'WP_ERROR' : wp_remote_retrieve_response_code($response);
+        $wp_error_details = $is_wp_error ? array(
+            'code'    => $response->get_error_code(),
+            'message' => $response->get_error_message(),
+        ) : null;
 
         // Process response using unified processor
         $result = Odoo_Response::process_unified($response_data, $orders_temp, false, true);
@@ -191,6 +258,45 @@ class Odoo_Orders {
         }
 
         // Handle retries if needed
+        self::$last_send_context = array(
+            'order_ids'          => $order_ids,
+            'orders_payload_map' => $orders_payload_map,
+            'orders_data'        => $orders_data,
+            'response'           => array(
+                'body'        => $response_body,
+                'data'        => $response_data,
+                'code'        => $response_code,
+                'is_wp_error' => $is_wp_error,
+                'wp_error'    => $wp_error_details,
+            ),
+            'result'        => $result,
+            'update'        => false,
+            'retry_attempt' => $retry_attempt,
+            'context'       => $context,
+            'timestamp'     => current_time('Y-m-d H:i:s'),
+        );
+
+        if (!empty($context['log_activity']) && class_exists('Odoo_Order_Activity_Logger')) {
+            Odoo_Order_Activity_Logger::log_odoo_send_attempt(
+                $order_ids,
+                array_merge(
+                    $context,
+                    array(
+                        'request_payloads'    => $orders_payload_map,
+                        'request_body'        => $orders_data,
+                        'response_body'       => $response_body,
+                        'response_data'       => $response_data,
+                        'response_code'       => $response_code,
+                        'response_is_wp_error'=> $is_wp_error,
+                        'response_wp_error'   => $wp_error_details,
+                        'result'              => $result,
+                        'update'              => false,
+                        'retry_attempt'       => $retry_attempt,
+                    )
+                )
+            );
+        }
+
         if (!$result['success'] && $retry_attempt < 3) {
             $ajax_retry_log_data = array(
                 'order_ids' => $order_ids,
@@ -213,7 +319,7 @@ class Odoo_Orders {
                 Odoo_Logger::log('ajax_retry_attempt', $ajax_retry_log_data);
             }
             
-            return self::handle_retry_attempt($order_ids, false, $retry_attempt, 'send_batch_ajax');
+            return self::handle_retry_attempt($order_ids, false, $retry_attempt, 'send_batch_ajax', $context);
         }
 
         // Return appropriate JSON response
@@ -612,7 +718,7 @@ class Odoo_Orders {
      * @param string $function_name Name of the function to retry
      * @return mixed Result from the retry attempt
      */
-    public static function handle_retry_attempt($order_ids, $update, $retry_attempt, $function_name) {
+    public static function handle_retry_attempt($order_ids, $update, $retry_attempt, $function_name, $context = array()) {
         if (function_exists('teamlog')) {
             teamlog("Retry attempt " . ($retry_attempt + 1) . " for orders: " . implode(', ', $order_ids));
         }
@@ -623,9 +729,9 @@ class Odoo_Orders {
         
         // Recursive call - handle both regular and AJAX functions
         if ($function_name === 'send_batch_ajax') {
-            return self::send_batch_ajax($order_ids, $retry_attempt + 1);
+            return self::send_batch_ajax($order_ids, $retry_attempt + 1, $context);
         } else {
-            return self::send_batch($order_ids, $update, $retry_attempt + 1);
+            return self::send_batch($order_ids, $update, $retry_attempt + 1, $context);
         }
     }
 } 
