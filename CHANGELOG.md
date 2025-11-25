@@ -2,6 +2,19 @@
 
 # Changelog
 
+## [1.255] - 2025-11-24
+
+### Fixed
+- Corrected WooCommerce hook registrations that caused `call_user_func_array` fatal errors during checkout.
+
+### Technical Details
+- Files Modified:
+  - `hooks/class-odoo-hooks.php` – Fixed `add_action` signatures for `woocommerce_checkout_order_created` and `woocommerce_process_shop_order_meta`.
+  - `wp-odoo-integration.php` – Bumped version to 1.255.
+  - `includes/class-odoo-core.php` – Updated `VERSION` constant to 1.255.
+  - `README.md` – Documented version 1.255.
+  - `CHANGELOG.md` – Added this entry.
+
 ## [1.254] - 2025-11-23
 
 ### Added

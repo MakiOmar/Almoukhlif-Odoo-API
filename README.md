@@ -2,11 +2,15 @@
 
 A comprehensive WordPress plugin that integrates WooCommerce with Odoo ERP system for stock validation, order synchronization, and inventory management.
 
-**Current Version: 1.254**
+**Current Version: 1.255**
 
 ## 📋 Changelog
 
-### Version 1.254 (Latest)
+### Version 1.255 (Latest)
+- 🐛 **FIXED**: Resolved fatal error during checkout caused by malformed callback arrays in WooCommerce hooks.
+- 🔧 **UPDATED**: `woocommerce_checkout_order_created` and `woocommerce_process_shop_order_meta` hooks now pass priority/args correctly.
+
+### Version 1.254
 - 📝 **ADDED**: Manual resend attempts (sync button + bulk actions) now log full request and response payloads inside the activity log for easier auditing.
 - 📦 **ENHANCED**: `send_batch()` / `send_batch_ajax()` support context-aware logging with request snapshots and retry metadata.
 - 🛠️ **UPDATED**: Admin bulk resend helpers and sync button now pass context so every manual send attempts is captured with source info.
