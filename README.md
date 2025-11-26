@@ -2,11 +2,19 @@
 
 A comprehensive WordPress plugin that integrates WooCommerce with Odoo ERP system for stock validation, order synchronization, and inventory management.
 
-**Current Version: 1.255**
+**Current Version: 1.257**
 
 ## 📋 Changelog
 
-### Version 1.255 (Latest)
+### Version 1.257 (Latest)
+- 🧾 **ADDED**: `billing.is_company` flag is now populated when VAT metadata contains a numeric value (order or customer level).
+- ✅ **ENSURES**: Odoo receives explicit company identification with each order payload.
+
+### Version 1.256
+- 🏙️ **IMPROVED**: Billing city/state normalization in order payloads—if one is empty, it falls back to the other before sending to Odoo.
+- 🔄 **UPDATED**: Ensures every order sent to Odoo always contains both city and state fields.
+
+### Version 1.255
 - 🐛 **FIXED**: Resolved fatal error during checkout caused by malformed callback arrays in WooCommerce hooks.
 - 🔧 **UPDATED**: `woocommerce_checkout_order_created` and `woocommerce_process_shop_order_meta` hooks now pass priority/args correctly.
 

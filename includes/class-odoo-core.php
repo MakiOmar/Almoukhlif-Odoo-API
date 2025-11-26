@@ -12,7 +12,7 @@ class Odoo_Core {
     /**
      * Plugin version
      */
-    const VERSION = '1.255';
+    const VERSION = '1.257';
     
     /**
      * Constructor

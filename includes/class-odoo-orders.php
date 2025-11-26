@@ -451,6 +451,10 @@ class Odoo_Orders {
             $billing_address_second = get_post_meta($order->get_id(), 'billing_address_second', true);
             $billing_building_number = get_post_meta($order->get_id(), 'billing_building_number', true);
             $billing_district = get_post_meta($order->get_id(), 'billing_district', true);
+            $customer_id = $order->get_customer_id();
+            $customer_company_vat = $customer_id ? get_user_meta($customer_id, 'billing_billing_company_vat', true) : '';
+            $company_identifier = !empty($billing_billing_company_vat) ? $billing_billing_company_vat : $customer_company_vat;
+            $is_company = is_numeric($company_identifier);
             
             if (!$billing_billing_company_vat || empty($billing_billing_company_vat)) {
                 $postcode = $order->get_billing_postcode();
@@ -459,12 +463,20 @@ class Odoo_Orders {
             }
             
             // Validate Billing Details
+            $billing_city = $order->get_billing_city();
+            $billing_state = $order->get_billing_state();
+            if (empty($billing_city) && !empty($billing_state)) {
+                $billing_city = $billing_state;
+            } elseif (empty($billing_state) && !empty($billing_city)) {
+                $billing_state = $billing_city;
+            }
+
             $billing_fields = array(
                 'first_name'      => $order->get_billing_first_name(),
                 'last_name'       => $order->get_billing_last_name(),
                 'address_1'       => $order->get_billing_address_1(),
-                'city'            => $order->get_billing_city(),
-                'state'           => $order->get_billing_state(),
+                'city'            => $billing_city,
+                'state'           => $billing_state,
                 'postcode'        => $postcode,
                 'company_vat'     => $billing_billing_company_vat,
                 'short_address'   => $billing_short_address,
@@ -474,6 +486,7 @@ class Odoo_Orders {
                 'country'         => $order->get_billing_country(),
                 'email'           => $order->get_billing_email(),
                 'phone'           => $order->get_billing_phone(),
+                'is_company'      => $is_company,
             );
 
             $order_status = $order->get_status();

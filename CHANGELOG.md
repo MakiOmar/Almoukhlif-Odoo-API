@@ -2,6 +2,32 @@
 
 # Changelog
 
+## [1.257] - 2025-11-24
+
+### Added
+- `billing.is_company` is now set when either the order-level or customer-level `billing_billing_company_vat` meta contains a numeric value.
+
+### Technical Details
+- Files Modified:
+  - `includes/class-odoo-orders.php` – Added VAT meta check and injected `is_company` into billing payloads.
+  - `wp-odoo-integration.php` – Bumped version to 1.257.
+  - `includes/class-odoo-core.php` – Updated VERSION constant to 1.257.
+  - `README.md` – Documented the new behavior.
+  - `CHANGELOG.md` – Added this entry.
+
+## [1.256] - 2025-11-24
+
+### Changed
+- Added fallback logic so billing city/state are never empty when preparing order data for Odoo.
+
+### Technical Details
+- Files Modified:
+  - `includes/class-odoo-orders.php` – Normalizes billing city/state before building the payload.
+  - `wp-odoo-integration.php` – Bumped version to 1.256.
+  - `includes/class-odoo-core.php` – Updated VERSION constant to 1.256.
+  - `README.md` – Documented the change.
+  - `CHANGELOG.md` – Added this entry.
+
 ## [1.255] - 2025-11-24
 
 ### Fixed
