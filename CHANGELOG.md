@@ -2,6 +2,19 @@
 
 # Changelog
 
+## [1.258] - 2025-11-24
+
+### Added
+- Normalized billing postal codes to always send exactly 5 digits to Odoo (strip non-digits, truncate or pad as needed).
+
+### Technical Details
+- Files Modified:
+  - `includes/class-odoo-orders.php` – Sanitizes `postcode` before building the billing payload.
+  - `wp-odoo-integration.php` – Bumped version to 1.258.
+  - `includes/class-odoo-core.php` – Updated VERSION constant to 1.258.
+  - `README.md` – Documented the change.
+  - `CHANGELOG.md` – Added this entry.
+
 ## [1.257] - 2025-11-24
 
 ### Added

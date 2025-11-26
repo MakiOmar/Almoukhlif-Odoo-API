@@ -2,11 +2,15 @@
 
 A comprehensive WordPress plugin that integrates WooCommerce with Odoo ERP system for stock validation, order synchronization, and inventory management.
 
-**Current Version: 1.257**
+**Current Version: 1.258**
 
 ## 📋 Changelog
 
-### Version 1.257 (Latest)
+### Version 1.258 (Latest)
+- 📮 **NEW**: Billing postal codes are sanitized to exactly 5 digits (non-digits removed, padded/truncated as needed) before sending to Odoo.
+- 🛡️ **ENSURES**: Odoo receives consistent postal code format even if WooCommerce data is incomplete.
+
+### Version 1.257
 - 🧾 **ADDED**: `billing.is_company` flag is now populated when VAT metadata contains a numeric value (order or customer level).
 - ✅ **ENSURES**: Odoo receives explicit company identification with each order payload.
 
