@@ -465,7 +465,7 @@ class Odoo_Orders {
             if (strlen($postcode) >= 5) {
                 $postcode = substr($postcode, 0, 5);
             } else {
-                $postcode = str_pad($postcode, 5, '0', STR_PAD_LEFT);
+                $postcode = str_pad($postcode, 5, '1', STR_PAD_LEFT);
             }
             
             // Validate Billing Details

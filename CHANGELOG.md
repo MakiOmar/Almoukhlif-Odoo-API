@@ -2,6 +2,19 @@
 
 # Changelog
 
+## [1.259] - 2025-11-24
+
+### Changed
+- Postal codes shorter than 5 digits are now left-padded with `1` instead of `0` to avoid all-zero placeholders.
+
+### Technical Details
+- Files Modified:
+  - `includes/class-odoo-orders.php` – Updated postcode padding logic.
+  - `wp-odoo-integration.php` – Bumped version to 1.259.
+  - `includes/class-odoo-core.php` – Updated VERSION constant to 1.259.
+  - `README.md` – Documented the change.
+  - `CHANGELOG.md` – Added this entry.
+
 ## [1.258] - 2025-11-24
 
 ### Added
