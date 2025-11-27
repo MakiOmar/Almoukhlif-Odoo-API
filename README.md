@@ -2,11 +2,14 @@
 
 A comprehensive WordPress plugin that integrates WooCommerce with Odoo ERP system for stock validation, order synchronization, and inventory management.
 
-**Current Version: 1.259**
+**Current Version: 1.260**
 
 ## 📋 Changelog
 
-### Version 1.259 (Latest)
+### Version 1.260 (Latest)
+- 🏢 **ENHANCED**: Company orders now backfill missing billing details (`company_vat`, `short_address`, `address_second`, `building_number`, `district`) from user meta whenever available.
+
+### Version 1.259
 - 📨 **CHANGED**: Postal code padding now uses `1` instead of `0` when WooCommerce provides fewer than 5 digits, avoiding all-zero fallbacks.
 
 ### Version 1.258

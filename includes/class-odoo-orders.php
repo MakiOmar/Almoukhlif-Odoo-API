@@ -455,6 +455,24 @@ class Odoo_Orders {
             $customer_company_vat = $customer_id ? get_user_meta($customer_id, 'billing_billing_company_vat', true) : '';
             $company_identifier = !empty($billing_billing_company_vat) ? $billing_billing_company_vat : $customer_company_vat;
             $is_company = is_numeric($company_identifier);
+
+            if ($is_company && $customer_id) {
+                if (empty($billing_billing_company_vat)) {
+                    $billing_billing_company_vat = get_user_meta($customer_id, 'billing_billing_company_vat', true);
+                }
+                if (empty($billing_short_address)) {
+                    $billing_short_address = get_user_meta($customer_id, 'billing_short_address', true);
+                }
+                if (empty($billing_address_second)) {
+                    $billing_address_second = get_user_meta($customer_id, 'billing_address_second', true);
+                }
+                if (empty($billing_building_number)) {
+                    $billing_building_number = get_user_meta($customer_id, 'billing_building_number', true);
+                }
+                if (empty($billing_district)) {
+                    $billing_district = get_user_meta($customer_id, 'billing_district', true);
+                }
+            }
             
             if (!$billing_billing_company_vat || empty($billing_billing_company_vat)) {
                 $postcode = $order->get_billing_postcode();

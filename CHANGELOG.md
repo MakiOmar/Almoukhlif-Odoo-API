@@ -2,6 +2,19 @@
 
 # Changelog
 
+## [1.260] - 2025-11-24
+
+### Added
+- When an order is flagged as a company (`is_company`), missing billing fields (`company_vat`, `short_address`, `address_second`, `building_number`, `district`) are now retrieved from the customer’s user meta.
+
+### Technical Details
+- Files Modified:
+  - `includes/class-odoo-orders.php` – Added user-meta fallbacks for company orders.
+  - `wp-odoo-integration.php` – Bumped version to 1.260.
+  - `includes/class-odoo-core.php` – Updated VERSION constant to 1.260.
+  - `README.md` – Documented the enhancement.
+  - `CHANGELOG.md` – Added this entry.
+
 ## [1.259] - 2025-11-24
 
 ### Changed
