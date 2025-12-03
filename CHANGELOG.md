@@ -2,6 +2,18 @@
 
 # Changelog
 
+## [1.261] - 2025-11-24
+
+### Changed
+- Internal version bump to keep release metadata in sync with recent billing/address changes.
+
+### Technical Details
+- Files Modified:
+  - `wp-odoo-integration.php` – Bumped version to 1.261.
+  - `includes/class-odoo-core.php` – Updated VERSION constant to 1.261.
+  - `README.md` – Updated current version and changelog header.
+  - `CHANGELOG.md` – Added this entry.
+
 ## [1.260] - 2025-11-24
 
 ### Added
