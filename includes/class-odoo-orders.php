@@ -474,17 +474,25 @@ class Odoo_Orders {
                 }
             }
             
-            if (!$billing_billing_company_vat || empty($billing_billing_company_vat)) {
+           if (!$billing_billing_company_vat || empty($billing_billing_company_vat)) {
                 $postcode = $order->get_billing_postcode();
             } else {
                 $postcode = get_post_meta($order->get_id(), 'billing_postal_code', true);
             }
+
             $postcode = preg_replace('/\D/', '', (string) $postcode);
+
+            // Ensure at least 1 digit exists before indexing
+            if ($postcode !== '' && $postcode[0] === '0') {
+                $postcode[0] = '1';
+            }
+
             if (strlen($postcode) >= 5) {
                 $postcode = substr($postcode, 0, 5);
             } else {
                 $postcode = str_pad($postcode, 5, '1', STR_PAD_LEFT);
             }
+
             
             // Validate Billing Details
             $billing_city = $order->get_billing_city();
