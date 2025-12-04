@@ -473,12 +473,73 @@ class Odoo_Orders {
                     $billing_district = get_user_meta($customer_id, 'billing_district', true);
                 }
             }
-            
-           if (!$billing_billing_company_vat || empty($billing_billing_company_vat)) {
-                $postcode = $order->get_billing_postcode();
+
+            // Determine raw postcode source before normalization
+            if (!$billing_billing_company_vat || empty($billing_billing_company_vat)) {
+                $raw_postcode = $order->get_billing_postcode();
             } else {
-                $postcode = get_post_meta($order->get_id(), 'billing_postal_code', true);
+                $raw_postcode = get_post_meta($order->get_id(), 'billing_postal_code', true);
             }
+
+            /**
+             * Company billing validation before sending to Odoo.
+             * 
+             * Based on README-company-validation.md rules:
+             * - Only applies when the customer is a company.
+             * - Prevents sending orders with invalid company billing data to Odoo.
+             * - Marks order as failed and records a detailed order note instead.
+             */
+            if ($is_company) {
+                $company_validation_errors = array();
+
+                if (!self::validate_company_billing_fields(
+                    $billing_billing_company_vat,
+                    $billing_short_address,
+                    $billing_building_number,
+                    $billing_address_second,
+                    $billing_district,
+                    $raw_postcode,
+                    $company_validation_errors
+                )) {
+                    // Mark order as failed and add an order note explaining why it was not sent
+                    update_post_meta($order_id, 'oodo-status', 'failed');
+
+                    $note_lines = array(
+                        'فشل إرسال الطلب إلى أودو بسبب بيانات مؤسسة غير صحيحة وفق قواعد التحقق.',
+                    );
+
+                    if (!empty($company_validation_errors)) {
+                        foreach ($company_validation_errors as $error) {
+                            $note_lines[] = '- ' . $error;
+                        }
+                    }
+
+                    $order->add_order_note(implode("\n", $note_lines), false);
+
+                    if (function_exists('teamlog')) {
+                        teamlog(sprintf(
+                            'Company billing validation failed for order #%d, preventing send to Odoo. Errors: %s',
+                            $order_id,
+                            implode(' | ', $company_validation_errors)
+                        ));
+                    } else {
+                        odoo_log(
+                            sprintf(
+                                '[Company Validation] Order #%d blocked from Odoo sync due to invalid company billing fields: %s',
+                                $order_id,
+                                implode(' | ', $company_validation_errors)
+                            ),
+                            'warning'
+                        );
+                    }
+
+                    // Skip building payload for this order, but continue processing others
+                    continue;
+                }
+            }
+
+            // Normalize postcode after validation
+            $postcode = $raw_postcode;
 
             $postcode = preg_replace('/\D/', '', (string) $postcode);
 
@@ -654,6 +715,125 @@ class Odoo_Orders {
         if (function_exists('teamlog')) {
             // teamlog(print_r($orders_data, true)); // Removed as orders_data is now logged in the main activity log
         }
+    }
+
+    /**
+     * Validate company-specific billing fields according to
+     * README-company-validation.md rules.
+     *
+     * @param string $company_vat
+     * @param string $short_address
+     * @param string $building_number
+     * @param string $address_second
+     * @param string $district
+     * @param string $raw_postcode
+     * @param array  $errors Populated with human-readable error messages (Arabic).
+     * @return bool True when all fields are valid, false otherwise.
+     */
+    private static function validate_company_billing_fields($company_vat, $short_address, $building_number, $address_second, $district, $raw_postcode, &$errors = array()) {
+        $is_valid = true;
+
+        // Normalize inputs
+        $company_vat = is_string($company_vat) ? trim($company_vat) : '';
+        $short_address = is_string($short_address) ? trim($short_address) : '';
+        $building_number = is_string($building_number) ? trim($building_number) : '';
+        $address_second = is_string($address_second) ? trim($address_second) : '';
+        $district = is_string($district) ? trim($district) : '';
+        $raw_postcode = is_string($raw_postcode) ? trim($raw_postcode) : (string) $raw_postcode;
+
+        // 3.1 Company VAT number validation
+        // - Required, 15 digits, digits only, not all zeros, starts with 3 and ends with 3.
+        if ($company_vat === '') {
+            $is_valid = false;
+            $errors[] = 'الرقم الضريبي للمؤسسة مفقود أو فارغ.';
+        } else {
+            $digits_only_vat = preg_replace('/\D/', '', $company_vat);
+
+            if ($digits_only_vat !== $company_vat) {
+                $is_valid = false;
+                $errors[] = 'الرقم الضريبي للمؤسسة يجب أن يحتوي على أرقام فقط.';
+            } elseif (strlen($digits_only_vat) !== 15) {
+                $is_valid = false;
+                $errors[] = 'الرقم الضريبي للمؤسسة يجب أن يتكون من 15 رقمًا.';
+            } elseif (preg_match('/^0+$/', $digits_only_vat)) {
+                $is_valid = false;
+                $errors[] = 'الرقم الضريبي للمؤسسة لا يمكن أن يكون مكونًا من أصفار فقط.';
+            } elseif ($digits_only_vat[0] !== '3' || substr($digits_only_vat, -1) !== '3') {
+                $is_valid = false;
+                $errors[] = 'الرقم الضريبي للمؤسسة يجب أن يبدأ بالرقم 3 وينتهي بالرقم 3.';
+            }
+        }
+
+        // 3.2 Short address - required
+        if ($short_address === '') {
+            $is_valid = false;
+            $errors[] = 'العنوان المختصر مطلوب عند اختيار المؤسسة.';
+        }
+
+        // 3.3 Building number - required, 4 digits, digits only, not all zeros
+        if ($building_number === '') {
+            $is_valid = false;
+            $errors[] = 'رقم المبنى مطلوب عند اختيار المؤسسة.';
+        } else {
+            $digits_only_building = preg_replace('/\D/', '', $building_number);
+
+            if ($digits_only_building !== $building_number) {
+                $is_valid = false;
+                $errors[] = 'رقم المبنى يجب أن يحتوي على أرقام فقط.';
+            } elseif (strlen($digits_only_building) !== 4) {
+                $is_valid = false;
+                $errors[] = 'رقم المبنى يجب أن يتكون من 4 أرقام.';
+            } elseif (preg_match('/^0+$/', $digits_only_building)) {
+                $is_valid = false;
+                $errors[] = 'رقم المبنى لا يمكن أن يكون مكونًا من أصفار فقط.';
+            }
+        }
+
+        // 3.5 District - required
+        if ($district === '') {
+            $is_valid = false;
+            $errors[] = 'الحي مطلوب عند اختيار المؤسسة.';
+        }
+
+        // 3.4 Secondary number (address_second) - required, 4 digits, digits only, not all zeros
+        if ($address_second === '') {
+            $is_valid = false;
+            $errors[] = 'الرقم الفرعي مطلوب عند اختيار المؤسسة.';
+        } else {
+            $digits_only_second = preg_replace('/\D/', '', $address_second);
+
+            if ($digits_only_second !== $address_second) {
+                $is_valid = false;
+                $errors[] = 'الرقم الفرعي يجب أن يحتوي على أرقام فقط.';
+            } elseif (strlen($digits_only_second) !== 4) {
+                $is_valid = false;
+                $errors[] = 'الرقم الفرعي يجب أن يتكون من 4 أرقام.';
+            } elseif (preg_match('/^0+$/', $digits_only_second)) {
+                $is_valid = false;
+                $errors[] = 'الرقم الفرعي لا يمكن أن يكون مكونًا من أصفار فقط.';
+            }
+        }
+
+        // 3.6 Postal code - required, 5 digits, digits only, not all zeros
+        if ($raw_postcode === '') {
+            $is_valid = false;
+            $errors[] = 'الرمز البريدي مطلوب عند اختيار المؤسسة.';
+        } else {
+            $digits_only_postcode = preg_replace('/\D/', '', $raw_postcode);
+
+            if ($digits_only_postcode !== $raw_postcode) {
+                $is_valid = false;
+                $errors[] = 'الرمز البريدي يجب أن يحتوي على أرقام فقط.';
+            } elseif (strlen($digits_only_postcode) !== 5) {
+                $is_valid = false;
+                $errors[] = 'الرمز البريدي يجب أن يتكون من 5 أرقام.';
+            } elseif (preg_match('/^0+$/', $digits_only_postcode)) {
+                $is_valid = false;
+                $errors[] = 'الرمز البريدي لا يمكن أن يكون مكونًا من أصفار فقط.';
+            }
+        }
+
+        return $is_valid;
     }
     
     /**

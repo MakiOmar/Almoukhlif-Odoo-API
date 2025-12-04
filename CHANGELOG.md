@@ -2,6 +2,19 @@
 
 # Changelog
 
+## [1.262] - 2025-12-04
+
+### Added
+- Prevent sending company orders to Odoo when company billing fields are invalid (according to `README-company-validation.md` rules). Such orders are now marked as failed with a detailed private order note instead of being sent.
+
+### Technical Details
+- Files Modified:
+  - `includes/class-odoo-orders.php` – Added company billing validation before payload construction and failure handling (order note + `oodo-status = failed`).
+  - `wp-odoo-integration.php` – Bumped version to 1.262.
+  - `includes/class-odoo-core.php` – Updated VERSION constant to 1.262.
+  - `README.md` – Updated version banner and changelog entry.
+  - `CHANGELOG.md` – Added this entry.
+
 ## [1.261] - 2025-11-24
 
 ### Changed
