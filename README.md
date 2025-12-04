@@ -2,11 +2,14 @@
 
 A comprehensive WordPress plugin that integrates WooCommerce with Odoo ERP system for stock validation, order synchronization, and inventory management.
 
-**Current Version: 1.262**
+**Current Version: 1.263**
 
 ## 📋 Changelog
 
-### Version 1.262 (Latest)
+### Version 1.263 (Latest)
+- 🔧 **IMPROVED**: Company billing validation now occurs directly before building the `$billing_fields` array, ensuring validation happens after all field normalization (postcode, city/state) is complete.
+
+### Version 1.262
 - 🏢 **ADDED**: Company orders with invalid company billing fields (per `README-company-validation.md`) are no longer sent to Odoo. Instead, the order is marked as failed and a detailed private order note explains which fields are invalid.
 
 ### Version 1.261

@@ -481,6 +481,32 @@ class Odoo_Orders {
                 $raw_postcode = get_post_meta($order->get_id(), 'billing_postal_code', true);
             }
 
+            // Normalize postcode
+            $postcode = $raw_postcode;
+
+            $postcode = preg_replace('/\D/', '', (string) $postcode);
+
+            // Ensure at least 1 digit exists before indexing
+            if ($postcode !== '' && $postcode[0] === '0') {
+                $postcode[0] = '1';
+            }
+
+            if (strlen($postcode) >= 5) {
+                $postcode = substr($postcode, 0, 5);
+            } else {
+                $postcode = str_pad($postcode, 5, '1', STR_PAD_LEFT);
+            }
+
+            
+            // Validate Billing Details
+            $billing_city = $order->get_billing_city();
+            $billing_state = $order->get_billing_state();
+            if (empty($billing_city) && !empty($billing_state)) {
+                $billing_city = $billing_state;
+            } elseif (empty($billing_state) && !empty($billing_city)) {
+                $billing_state = $billing_city;
+            }
+
             /**
              * Company billing validation before sending to Odoo.
              * 
@@ -488,6 +514,7 @@ class Odoo_Orders {
              * - Only applies when the customer is a company.
              * - Prevents sending orders with invalid company billing data to Odoo.
              * - Marks order as failed and records a detailed order note instead.
+             * - Stops processing this order if validation fails.
              */
             if ($is_company) {
                 $company_validation_errors = array();
@@ -533,35 +560,9 @@ class Odoo_Orders {
                         );
                     }
 
-                    // Skip building payload for this order, but continue processing others
+                    // Stop processing this order - skip building payload and continue to next order
                     continue;
                 }
-            }
-
-            // Normalize postcode after validation
-            $postcode = $raw_postcode;
-
-            $postcode = preg_replace('/\D/', '', (string) $postcode);
-
-            // Ensure at least 1 digit exists before indexing
-            if ($postcode !== '' && $postcode[0] === '0') {
-                $postcode[0] = '1';
-            }
-
-            if (strlen($postcode) >= 5) {
-                $postcode = substr($postcode, 0, 5);
-            } else {
-                $postcode = str_pad($postcode, 5, '1', STR_PAD_LEFT);
-            }
-
-            
-            // Validate Billing Details
-            $billing_city = $order->get_billing_city();
-            $billing_state = $order->get_billing_state();
-            if (empty($billing_city) && !empty($billing_state)) {
-                $billing_city = $billing_state;
-            } elseif (empty($billing_state) && !empty($billing_city)) {
-                $billing_state = $billing_city;
             }
 
             $billing_fields = array(

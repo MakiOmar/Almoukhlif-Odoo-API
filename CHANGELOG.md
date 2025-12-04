@@ -2,6 +2,19 @@
 
 # Changelog
 
+## [1.263] - 2025-12-04
+
+### Changed
+- Company billing validation now occurs directly before building the `$billing_fields` array, ensuring validation happens after all field normalization (postcode, city/state) is complete. This ensures validation uses the final normalized values and stops order processing immediately if validation fails.
+
+### Technical Details
+- Files Modified:
+  - `includes/class-odoo-orders.php` – Moved company validation block to directly before `$billing_fields` array construction.
+  - `wp-odoo-integration.php` – Bumped version to 1.263.
+  - `includes/class-odoo-core.php` – Updated VERSION constant to 1.263.
+  - `README.md` – Updated version banner and changelog entry.
+  - `CHANGELOG.md` – Added this entry.
+
 ## [1.262] - 2025-12-04
 
 ### Added
